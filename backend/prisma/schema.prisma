@@ -1,0 +1,208 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  USER
+  EMPLOYEE
+}
+
+enum AccountStatus {
+  ACTIVE
+  INVITED
+  DISABLED
+}
+
+enum PlatformLanguage {
+  EN
+  RW
+  FR
+}
+
+enum DocumentLanguage {
+  KINYARWANDA
+  ENGLISH
+  FRENCH
+}
+
+enum SummaryLength {
+  SHORT
+  MEDIUM
+  DETAILED
+}
+
+enum ProcessingAction {
+  SUMMARIZE
+  TRANSLATE
+  SUMMARIZE_AND_TRANSLATE
+}
+
+enum DocStatus {
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum ValidationAction {
+  APPROVE
+  REJECT
+  IMPROVEMENT
+}
+
+enum PasswordRequirements {
+  STANDARD
+  STRONG
+  GOVERNMENT
+}
+
+enum ActivityStatus {
+  APPROVED
+  COMPLETED
+  FAILED
+}
+
+model User {
+  id           Int           @id @default(autoincrement())
+  name         String
+  email        String        @unique
+  passwordHash String
+  role         UserRole      @default(USER)
+  office       String        @default("Public")
+  status       AccountStatus @default(ACTIVE)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  preferences  UserPreferences?
+  organization OrganizationProfile?
+  documents    Document[]
+  validations  ValidationRecord[]
+  activityLogs ActivityLog[]
+
+  @@index([role])
+  @@index([status])
+}
+
+model UserPreferences {
+  id                    Int              @id @default(autoincrement())
+  userId                Int              @unique
+  interfaceLanguage     PlatformLanguage @default(EN)
+  defaultSummaryLength  SummaryLength    @default(MEDIUM)
+  defaultTargetLanguage DocumentLanguage @default(KINYARWANDA)
+  emailNotifications    Boolean          @default(true)
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model OrganizationProfile {
+  id               Int    @id @default(autoincrement())
+  userId           Int    @unique
+  organizationName String @default("MINALOC")
+  province         String @default("Kigali, RWANDA")
+  contactEmail     String @default("info@minaloc.gov.rw")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model SystemSettings {
+  id                    Int                  @id @default(1)
+  orgName               String               @default("MINALOC")
+  defaultLanguage       PlatformLanguage     @default(EN)
+  defaultOutputLanguage DocumentLanguage     @default(KINYARWANDA)
+  passwordRequirements  PasswordRequirements @default(STRONG)
+  docProcessedAlerts    Boolean              @default(true)
+  validationAlerts      Boolean              @default(true)
+  userRegistrationAlerts Boolean             @default(true)
+  updatedAt             DateTime             @updatedAt
+}
+
+model Document {
+  id              String           @id @default(cuid())
+  referenceId     String           @unique
+  userId          Int
+  fileName        String
+  filePath        String?
+  mimeType        String?
+  fileSizeBytes   Int              @default(0)
+  sourceLanguage  DocumentLanguage
+  targetLanguage  DocumentLanguage
+  action          ProcessingAction
+  summaryLength   SummaryLength?
+  status          DocStatus        @default(PROCESSING)
+  qualityScore    Int?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  completedAt     DateTime?
+
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  result       ProcessingResult?
+  validations  ValidationRecord[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model ProcessingResult {
+  id                  String            @id @default(cuid())
+  documentId          String            @unique
+  summary             String?
+  translation         String?
+  summaryLanguage     DocumentLanguage?
+  translationLanguage DocumentLanguage?
+  generatedAt         DateTime?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+}
+
+model ValidationRecord {
+  id         String           @id @default(cuid())
+  documentId String
+  userId     Int
+  action     ValidationAction
+  feedback   String?
+  notes      String?
+  createdAt  DateTime         @default(now())
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@index([userId])
+}
+
+model ActivityLog {
+  id        String         @id @default(cuid())
+  userId    Int?
+  userName  String
+  action    String
+  status    ActivityStatus @default(COMPLETED)
+  metadata  Json?
+  createdAt DateTime       @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+}
+
+model Report {
+  id          String    @id @default(cuid())
+  reportName  String
+  period      String
+  status      DocStatus @default(COMPLETED)
+  generatedAt DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+
+  @@index([generatedAt])
+}
