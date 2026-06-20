@@ -10,6 +10,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Copy, Download, Loader2 } from "lucide-react";
 import { LANGUAGES } from "@/lib/mock-data";
+import { api } from "@/lib/api-client";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/summarize")({
@@ -26,18 +27,26 @@ function SummarizePage() {
   const [output, setOutput] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handle = () => {
+  const handle = async () => {
     if (text.trim().length < 30) {
       toast.error("Please paste more text to summarize");
       return;
     }
     setLoading(true);
-    setTimeout(() => {
-      setOutput(
-        "Summary (" + length + "): The district released a quarterly report highlighting major progress in infrastructure (42 km of roads rehabilitated), healthcare (3 new health posts), and education (1,200+ new ECD enrolments). Officials commit to accelerating delivery in Q3 and strengthening community engagement."
-      );
+    try {
+      const result = await api.post<any>("/documents/summarize", {
+        text: text.trim(),
+        sourceLanguage: source,
+        targetLanguage: source,
+        action: "summarize",
+      });
+      setOutput(`Document submitted for summarization (${result.id}). Status: ${result.status}. The AI service will process this shortly.`);
+      toast.success("Text submitted for summarization");
+    } catch (err: any) {
+      toast.error(err?.message || "Summarization request failed");
+    } finally {
       setLoading(false);
-    }, 1300);
+    }
   };
 
   return (

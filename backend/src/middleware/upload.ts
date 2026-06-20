@@ -1,38 +1,36 @@
-import fs from "node:fs";
-import path from "node:path";
 import multer from "multer";
+import path from "path";
+import fs from "fs";
 import { env } from "../config/env.js";
 
-if (!fs.existsSync(env.uploadDir)) {
-  fs.mkdirSync(env.uploadDir, { recursive: true });
+const uploadDir = path.resolve(env.UPLOAD_DIR);
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
 }
 
 const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, env.uploadDir),
+  destination: (_req, _file, cb) => {
+    cb(null, uploadDir);
+  },
   filename: (_req, file, cb) => {
-    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    cb(null, `${unique}-${file.originalname}`);
+    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    const ext = path.extname(file.originalname);
+    cb(null, `${uniqueSuffix}${ext}`);
   },
 });
 
-const allowedMimeTypes = new Set([
-  "application/pdf",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "text/plain",
-]);
+const fileFilter = (_req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+  const allowed = [".pdf", ".docx", ".doc", ".txt"];
+  const ext = path.extname(file.originalname).toLowerCase();
+  if (allowed.includes(ext)) {
+    cb(null, true);
+  } else {
+    cb(new Error(`File type ${ext} not allowed. Allowed types: ${allowed.join(", ")}`));
+  }
+};
 
 export const upload = multer({
   storage,
-  limits: { fileSize: env.maxFileSizeMb * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (
-      allowedMimeTypes.has(file.mimetype) ||
-      [".pdf", ".docx", ".txt"].includes(ext)
-    ) {
-      cb(null, true);
-      return;
-    }
-    cb(new Error("Only PDF, DOCX, and TXT files are allowed"));
-  },
+  fileFilter,
+  limits: { fileSize: env.MAX_FILE_SIZE_MB * 1024 * 1024 },
 });

@@ -21,6 +21,8 @@ import {
   Legend,
 } from "recharts";
 import { toast } from "sonner";
+import { useLanguage } from "@/contexts/language-context";
+import type { TranslationKey } from "@/lib/i18n";
 
 export const Route = createFileRoute("/admin/dashboard")({
   head: () => ({ meta: [{ title: "Admin Dashboard · GovLingua AI" }] }),
@@ -28,11 +30,13 @@ export const Route = createFileRoute("/admin/dashboard")({
 });
 
 function AdminDashboard() {
+  const { t } = useLanguage();
+
   const stats = [
-    { label: "Total Users", value: "125", sub: "Active accounts" },
-    { label: "Documents Processed", value: "1,284", sub: "Total documents" },
-    { label: "Summaries Generated", value: "962", sub: "Concise summaries" },
-    { label: "Translations Generated", value: "734", sub: "Translated files" },
+    { labelKey: "admin.dashboard.totalUsers" as TranslationKey, value: "125", subKey: "admin.dashboard.activeAccounts" as TranslationKey },
+    { labelKey: "admin.dashboard.documentsProcessed" as TranslationKey, value: "1,284", subKey: "admin.dashboard.totalDocuments" as TranslationKey },
+    { labelKey: "admin.dashboard.summariesGenerated" as TranslationKey, value: "962", subKey: "admin.dashboard.conciseSummaries" as TranslationKey },
+    { labelKey: "admin.dashboard.translationsGenerated" as TranslationKey, value: "734", subKey: "admin.dashboard.translatedFiles" as TranslationKey },
   ];
 
   const recentLogs = [
@@ -46,41 +50,39 @@ function AdminDashboard() {
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col gap-1">
-        <h1 className="font-display text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground">Overview of system status, user accounts, and document processing.</p>
+        <h1 className="font-display text-3xl font-bold tracking-tight">{t("admin.dashboard.title")}</h1>
+        <p className="text-muted-foreground">{t("admin.dashboard.subtitle")}</p>
       </div>
 
-      {/* 4 Stats Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((s) => (
-          <Card key={s.label}>
+          <Card key={s.labelKey}>
             <CardContent className="p-5">
-              <p className="text-sm text-muted-foreground font-medium">{s.label}</p>
+              <p className="text-sm text-muted-foreground font-medium">{t(s.labelKey)}</p>
               <p className="mt-2 font-display text-3xl font-bold">{s.value}</p>
-              <p className="mt-1 text-xs text-muted-foreground font-medium">{s.sub}</p>
+              <p className="mt-1 text-xs text-muted-foreground font-medium">{t(s.subKey)}</p>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      {/* Activity Chart Card */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base font-bold">System Activity</CardTitle>
-          <p className="text-xs text-muted-foreground">Daily counts of system transactions this week</p>
+          <CardTitle className="text-base font-bold">{t("admin.dashboard.systemActivity")}</CardTitle>
+          <p className="text-xs text-muted-foreground">{t("admin.dashboard.systemActivitySub")}</p>
         </CardHeader>
         <CardContent>
           <div className="h-[280px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={[
-                  { name: "Mon", signups: 2, documents: 12, summaries: 9, translations: 8 },
-                  { name: "Tue", signups: 4, documents: 18, summaries: 13, translations: 12 },
-                  { name: "Wed", signups: 1, documents: 15, summaries: 20, translations: 22 },
-                  { name: "Thu", signups: 5, documents: 24, summaries: 26, translations: 18 },
-                  { name: "Fri", signups: 3, documents: 22, summaries: 18, translations: 15 },
-                  { name: "Sat", signups: 0, documents: 10, summaries: 8, translations: 5 },
-                  { name: "Sun", signups: 1, documents: 7, summaries: 4, translations: 3 },
+                  { name: t("day.mon"), signups: 2, documents: 12, summaries: 9, translations: 8 },
+                  { name: t("day.tue"), signups: 4, documents: 18, summaries: 13, translations: 12 },
+                  { name: t("day.wed"), signups: 1, documents: 15, summaries: 20, translations: 22 },
+                  { name: t("day.thu"), signups: 5, documents: 24, summaries: 26, translations: 18 },
+                  { name: t("day.fri"), signups: 3, documents: 22, summaries: 18, translations: 15 },
+                  { name: t("day.sat"), signups: 0, documents: 10, summaries: 8, translations: 5 },
+                  { name: t("day.sun"), signups: 1, documents: 7, summaries: 4, translations: 3 },
                 ]}
                 margin={{
                   top: 10,
@@ -116,7 +118,7 @@ function AdminDashboard() {
                                 className="h-2.5 w-2.5 rounded-sm"
                                 style={{ backgroundColor: p.color }}
                               />
-                              <span className="text-muted-foreground font-medium">{p.name.charAt(0).toUpperCase() + p.name.slice(1)}</span>
+                              <span className="text-muted-foreground font-medium">{p.name}</span>
                               <span className="font-bold ml-auto text-foreground">{p.value}</span>
                             </div>
                           ))}
@@ -133,34 +135,34 @@ function AdminDashboard() {
                   iconSize={10}
                   formatter={(value) => (
                     <span className="text-[11px] font-medium text-muted-foreground mr-3">
-                      {value.charAt(0).toUpperCase() + value.slice(1)}
+                      {value}
                     </span>
                   )}
                 />
                 <Bar
                   dataKey="signups"
-                  name="user signups"
+                  name={t("admin.dashboard.totalUsers")}
                   fill="#c9a227"
                   radius={[3, 3, 0, 0]}
                   maxBarSize={12}
                 />
                 <Bar
                   dataKey="documents"
-                  name="documents"
+                  name={t("admin.dashboard.documentsProcessed")}
                   fill="#163a5f"
                   radius={[3, 3, 0, 0]}
                   maxBarSize={12}
                 />
                 <Bar
                   dataKey="summaries"
-                  name="summaries"
+                  name={t("admin.dashboard.summariesGenerated")}
                   fill="#2f6b4f"
                   radius={[3, 3, 0, 0]}
                   maxBarSize={12}
                 />
                 <Bar
                   dataKey="translations"
-                  name="translations"
+                  name={t("admin.dashboard.translationsGenerated")}
                   fill="#8b5cf6"
                   radius={[3, 3, 0, 0]}
                   maxBarSize={12}
@@ -171,20 +173,19 @@ function AdminDashboard() {
         </CardContent>
       </Card>
 
-      {/* Recent System Logs Table */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base font-bold">Recent System Logs</CardTitle>
+          <CardTitle className="text-base font-bold">{t("admin.dashboard.recentLogs")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>User / Trigger</TableHead>
-                  <TableHead>Action Logged</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>{t("admin.dashboard.colDate")}</TableHead>
+                  <TableHead>{t("admin.dashboard.colUserTrigger")}</TableHead>
+                  <TableHead>{t("admin.dashboard.colActionLogged")}</TableHead>
+                  <TableHead>{t("admin.dashboard.colStatus")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -206,7 +207,7 @@ function AdminDashboard() {
               onClick={() => toast.info("Full activity log export simulation")}
               className="bg-[#163a5f] hover:bg-[#163a5f]/95 text-white font-semibold rounded-full px-6 py-2.5 shadow-md cursor-pointer transition"
             >
-              View Full Activity Log
+              {t("admin.dashboard.viewFullLog")}
             </Button>
           </div>
         </CardContent>

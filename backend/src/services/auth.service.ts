@@ -1,126 +1,132 @@
-import type { User } from "@prisma/client";
-import { prisma } from "../lib/prisma.js";
-import { BadRequestError, ConflictError, UnauthorizedError } from "../utils/errors.js";
-import {
-  toApiPlatformLanguage,
-  toApiRole,
-  toApiStatus,
-} from "../utils/mappers.js";
-import { hashPassword, validatePasswordStrength, verifyPassword } from "../utils/password.js";
-import { signToken } from "../utils/jwt.js";
-import * as activityLogService from "./activityLog.service.js";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import { prisma } from "../config/database.js";
+import { env } from "../config/env.js";
+import { AppError } from "../middleware/error-handler.js";
+import { Role } from "@prisma/client";
+import type { AuthPayload } from "../middleware/auth.js";
 
-function serializeUser(user: User) {
-  return {
-    userId: user.id,
-    email: user.email,
-    name: user.name,
-    role: toApiRole(user.role),
-    office: user.office,
-    status: toApiStatus(user.status),
-    createdAt: user.createdAt,
-    updatedAt: user.updatedAt,
-  };
+function generateToken(userId: string, role: Role): string {
+  const payload: AuthPayload = { userId, role };
+  return jwt.sign(payload, env.JWT_SECRET, { expiresIn: env.JWT_EXPIRES_IN } as jwt.SignOptions);
 }
 
-export async function register(name: string, email: string, password: string) {
-  validatePasswordStrength(password);
-
-  const normalizedEmail = email.trim().toLowerCase();
-  const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+export async function register(data: {
+  name: string;
+  email: string;
+  password: string;
+  role?: Role;
+  office?: string;
+}) {
+  const existing = await prisma.user.findUnique({ where: { email: data.email } });
   if (existing) {
-    throw new ConflictError("An account with this email already exists");
+    throw new AppError(409, "Email already registered");
   }
 
-  const passwordHash = await hashPassword(password);
-
+  const passwordHash = await bcrypt.hash(data.password, 12);
   const user = await prisma.user.create({
     data: {
-      name: name.trim(),
-      email: normalizedEmail,
+      name: data.name,
+      email: data.email,
       passwordHash,
-      role: "USER",
-      office: "Public",
-      status: "ACTIVE",
+      role: data.role || "USER",
+      office: data.office || "Public",
       preferences: { create: {} },
-      organization: { create: {} },
+      organizationProfile: { create: {} },
     },
+    select: { id: true, name: true, email: true, role: true, office: true, status: true, createdAt: true },
   });
 
-  await activityLogService.create({
-    userId: user.id,
-    userName: user.name,
-    action: `Registered new account: ${user.email}`,
-    status: "COMPLETED",
+  await prisma.activityLog.create({
+    data: { userId: user.id, action: "REGISTER", details: "User account created" },
   });
 
-  const token = signToken({ userId: user.id, email: user.email, role: user.role });
-
-  return { token, user: serializeUser(user) };
+  const token = generateToken(user.id, user.role);
+  return { user, token };
 }
 
 export async function login(email: string, password: string) {
-  if (!email || !password) {
-    throw new BadRequestError("Please fill in all fields", "missing_fields");
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) {
+    throw new AppError(401, "Invalid email or password");
   }
 
-  const normalizedEmail = email.trim().toLowerCase();
-  const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
-
-  if (!user || !(await verifyPassword(password, user.passwordHash))) {
-    throw new UnauthorizedError("Invalid email or password");
+  if (user.status !== "ACTIVE") {
+    throw new AppError(403, "Account is disabled. Please contact your administrator.");
   }
 
-  if (user.status === "DISABLED") {
-    throw new UnauthorizedError("This account has been disabled");
+  const isValid = await bcrypt.compare(password, user.passwordHash);
+  if (!isValid) {
+    throw new AppError(401, "Invalid email or password");
   }
 
-  const token = signToken({ userId: user.id, email: user.email, role: user.role });
-
-  return { token, user: serializeUser(user) };
-}
-
-export async function getMe(userId: number) {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    include: { preferences: true, organization: true },
+  await prisma.activityLog.create({
+    data: { userId: user.id, action: "LOGIN", details: "User logged in" },
   });
 
-  if (!user) {
-    throw new UnauthorizedError();
-  }
-
+  const token = generateToken(user.id, user.role);
   return {
-    ...serializeUser(user),
-    preferences: user.preferences
-      ? {
-          interfaceLanguage: toApiPlatformLanguage(user.preferences.interfaceLanguage),
-          defaultSummaryLength: user.preferences.defaultSummaryLength.toLowerCase(),
-          defaultTargetLanguage: user.preferences.defaultTargetLanguage,
-          emailNotifications: user.preferences.emailNotifications,
-        }
-      : null,
-    organization: user.organization,
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      office: user.office,
+      status: user.status,
+      createdAt: user.createdAt,
+    },
+    token,
   };
 }
 
-export async function changePassword(userId: number, currentPassword: string, newPassword: string) {
-  validatePasswordStrength(newPassword);
-
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) {
-    throw new UnauthorizedError();
-  }
-
-  const valid = await verifyPassword(currentPassword, user.passwordHash);
-  if (!valid) {
-    throw new BadRequestError("Current password is incorrect", "invalid_credentials");
-  }
-
-  await prisma.user.update({
+export async function getProfile(userId: string) {
+  const user = await prisma.user.findUnique({
     where: { id: userId },
-    data: { passwordHash: await hashPassword(newPassword) },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      office: true,
+      status: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+  if (!user) throw new AppError(404, "User not found");
+  return user;
+}
+
+export async function changePassword(userId: string, currentPassword: string, newPassword: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new AppError(404, "User not found");
+
+  const isValid = await bcrypt.compare(currentPassword, user.passwordHash);
+  if (!isValid) throw new AppError(400, "Current password is incorrect");
+
+  const passwordHash = await bcrypt.hash(newPassword, 12);
+  await prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+
+  await prisma.activityLog.create({
+    data: { userId, action: "PASSWORD_CHANGE", details: "Password updated" },
   });
 
-  return { success: true };
+  return { message: "Password updated successfully" };
+}
+
+export async function updateProfile(userId: string, data: { name?: string; email?: string; office?: string }) {
+  if (data.email) {
+    const existing = await prisma.user.findFirst({
+      where: { email: data.email, NOT: { id: userId } },
+    });
+    if (existing) throw new AppError(409, "Email already in use");
+  }
+
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data,
+    select: { id: true, name: true, email: true, role: true, office: true, status: true, createdAt: true },
+  });
+
+  return user;
 }

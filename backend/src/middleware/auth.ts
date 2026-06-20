@@ -1,54 +1,65 @@
-import type { NextFunction, Request, Response } from "express";
-import type { User, UserRole } from "@prisma/client";
-import { prisma } from "../lib/prisma.js";
-import { ForbiddenError, UnauthorizedError } from "../utils/errors.js";
-import { verifyToken } from "../utils/jwt.js";
+import { Request, Response, NextFunction } from "express";
+import jwt from "jsonwebtoken";
+import { env } from "../config/env.js";
+import { prisma } from "../config/database.js";
+import { Role } from "@prisma/client";
 
-export type AuthenticatedRequest = Request & {
-  user: User;
-};
+export interface AuthPayload {
+  userId: string;
+  role: Role;
+}
 
-export async function authenticate(req: Request, _res: Response, next: NextFunction) {
-  try {
-    const header = req.headers.authorization;
-    if (!header?.startsWith("Bearer ")) {
-      throw new UnauthorizedError("Missing or invalid authorization header");
+declare global {
+  namespace Express {
+    interface Request {
+      user?: {
+        id: string;
+        role: Role;
+        email: string;
+        name: string;
+      };
     }
-
-    const token = header.slice(7);
-    const payload = verifyToken(token);
-
-    const user = await prisma.user.findUnique({ where: { id: payload.userId } });
-    if (!user || user.status === "DISABLED") {
-      throw new UnauthorizedError("Account not found or disabled");
-    }
-
-    (req as AuthenticatedRequest).user = user;
-    next();
-  } catch (error) {
-    if (error instanceof UnauthorizedError) {
-      next(error);
-      return;
-    }
-    next(new UnauthorizedError("Invalid or expired token"));
   }
 }
 
-export function requireRoles(...roles: UserRole[]) {
-  return (req: Request, _res: Response, next: NextFunction) => {
-    const user = (req as AuthenticatedRequest).user;
-    if (!user) {
-      next(new UnauthorizedError());
+export function authenticate(req: Request, res: Response, next: NextFunction): void {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith("Bearer ")) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+
+  const token = authHeader.split(" ")[1];
+  try {
+    const payload = jwt.verify(token, env.JWT_SECRET) as AuthPayload;
+    prisma.user
+      .findUnique({ where: { id: payload.userId } })
+      .then((user) => {
+        if (!user || user.status !== "ACTIVE") {
+          res.status(401).json({ error: "User not found or inactive" });
+          return;
+        }
+        req.user = { id: user.id, role: user.role, email: user.email, name: user.name };
+        next();
+      })
+      .catch(() => {
+        res.status(500).json({ error: "Authentication failed" });
+      });
+  } catch {
+    res.status(401).json({ error: "Invalid or expired token" });
+  }
+}
+
+export function authorize(...roles: Role[]) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    if (!req.user) {
+      res.status(401).json({ error: "Authentication required" });
       return;
     }
-    if (!roles.includes(user.role)) {
-      next(new ForbiddenError("Insufficient permissions"));
+    if (!roles.includes(req.user.role)) {
+      res.status(403).json({ error: "Insufficient permissions" });
       return;
     }
     next();
   };
-}
-
-export function optionalProcessingKey(req: Request, _res: Response, next: NextFunction) {
-  next();
 }

@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/select";
 import { useLanguage } from "@/contexts/language-context";
 import { PLATFORM_LANGUAGES, type PlatformLanguage } from "@/lib/i18n";
+import { api, getToken } from "@/lib/api-client";
 
 type LanguageSelectorProps = {
   className?: string;
@@ -17,9 +18,16 @@ type LanguageSelectorProps = {
 export function LanguageSelector({ className, triggerClassName }: LanguageSelectorProps) {
   const { language, setLanguage, t } = useLanguage();
 
+  const handleChange = (value: string) => {
+    setLanguage(value as PlatformLanguage);
+    if (getToken()) {
+      api.patch("/users/me/preferences", { interfaceLanguage: value }).catch(() => {});
+    }
+  };
+
   return (
     <div className={className}>
-      <Select value={language} onValueChange={(value) => setLanguage(value as PlatformLanguage)}>
+      <Select value={language} onValueChange={handleChange}>
         <SelectTrigger className={triggerClassName ?? "w-[150px] gap-2"} aria-label={t("language.label")}>
           <Globe className="h-4 w-4 shrink-0 text-muted-foreground" />
           <SelectValue />

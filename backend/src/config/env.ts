@@ -1,23 +1,15 @@
-import dotenv from "dotenv";
+import { z } from "zod";
 
-dotenv.config();
+const envSchema = z.object({
+  DATABASE_URL: z.string().min(1),
+  JWT_SECRET: z.string().default("govlingua-dev-secret-key-change-in-production"),
+  JWT_EXPIRES_IN: z.string().default("7d"),
+  PORT: z.coerce.number().default(3001),
+  FRONTEND_URL: z.string().default("http://localhost:5173"),
+  UPLOAD_DIR: z.string().default("uploads"),
+  MAX_FILE_SIZE_MB: z.coerce.number().default(10),
+  PROCESSING_API_KEY: z.string().default("dev-processing-key"),
+  AI_SERVICE_URL: z.string().default("http://localhost:8000"),
+});
 
-function requireEnv(name: string, fallback?: string): string {
-  const value = process.env[name] ?? fallback;
-  if (!value) {
-    throw new Error(`Missing required environment variable: ${name}`);
-  }
-  return value;
-}
-
-export const env = {
-  nodeEnv: process.env.NODE_ENV ?? "development",
-  port: Number(process.env.PORT ?? 3001),
-  databaseUrl: requireEnv("DATABASE_URL"),
-  jwtSecret: requireEnv("JWT_SECRET", "dev-jwt-secret-change-in-production"),
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "7d",
-  frontendUrl: process.env.FRONTEND_URL ?? "http://localhost:5173",
-  uploadDir: process.env.UPLOAD_DIR ?? "uploads",
-  maxFileSizeMb: Number(process.env.MAX_FILE_SIZE_MB ?? 20),
-  processingApiKey: process.env.PROCESSING_API_KEY ?? "",
-};
+export const env = envSchema.parse(process.env);

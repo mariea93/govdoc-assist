@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/select";
 import { ArrowLeftRight, Copy, Download, Loader2 } from "lucide-react";
 import { LANGUAGES } from "@/lib/mock-data";
+import { api } from "@/lib/api-client";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/translate")({
@@ -29,19 +30,23 @@ function TranslatePage() {
     setOutput(input);
   };
 
-  const translate = () => {
+  const translate = async () => {
     if (!input.trim()) return toast.error("Enter text to translate");
     setLoading(true);
-    setTimeout(() => {
-      setOutput(
-        target === "Kinyarwanda"
-          ? "Iyi nyandiko yahinduwe mu Kinyarwanda hifashishijwe ubuhanga bwa GovLingua AI. Iyifashishe kugira ngo igere ku baturage no kuri abakozi b'ubutegetsi bw'ibanze mu buryo bwihuse."
-          : target === "French"
-          ? "Ce texte a été traduit en français à l'aide de GovLingua AI afin de faciliter la communication entre les administrations locales et les citoyens."
-          : "This text has been translated to English using GovLingua AI to support communication between local government offices and citizens."
-      );
+    try {
+      const result = await api.post<any>("/documents/translate", {
+        text: input.trim(),
+        sourceLanguage: source,
+        targetLanguage: target,
+        action: "translate",
+      });
+      setOutput(`Translation submitted (${result.id}). Status: ${result.status}. The AI service will process this shortly.`);
+      toast.success("Text submitted for translation");
+    } catch (err: any) {
+      toast.error(err?.message || "Translation request failed");
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   };
 
   return (

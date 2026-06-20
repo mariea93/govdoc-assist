@@ -13,6 +13,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { UploadCloud, FileText, X, Loader2 } from "lucide-react";
 import { LANGUAGES } from "@/lib/mock-data";
+import { api } from "@/lib/api-client";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/upload")({
@@ -31,17 +32,32 @@ function UploadPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
-  const handleProcess = () => {
+  const handleProcess = async () => {
     if (!file) {
       toast.error("Please upload a document first");
       return;
     }
     setProcessing(true);
-    setTimeout(() => {
+    try {
+      const actionMap: Record<string, string> = {
+        summarize: "summarize",
+        translate: "translate",
+        both: "summarize_translate",
+      };
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("sourceLanguage", source);
+      formData.append("targetLanguage", target);
+      formData.append("action", actionMap[action] || "summarize_translate");
+
+      await api.upload("/documents/upload", formData);
+      toast.success("Document uploaded successfully");
+      navigate({ to: "/history" });
+    } catch (err: any) {
+      toast.error(err?.message || "Upload failed");
+    } finally {
       setProcessing(false);
-      toast.success("Document processed successfully");
-      navigate({ to: "/results" });
-    }, 1800);
+    }
   };
 
   return (

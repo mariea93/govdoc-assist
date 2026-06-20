@@ -9,7 +9,6 @@ import { resolvePostLoginRedirect } from "@/lib/auth-redirect";
 import { getDefaultRouteForRole } from "@/lib/permissions";
 import { useAuth } from "@/contexts/auth-context";
 import { useLanguage } from "@/contexts/language-context";
-import { findUserByEmail, saveCustomUser } from "@/lib/user-accounts";
 import { Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 
@@ -33,7 +32,7 @@ export const Route = createFileRoute("/sign-in")({
 
 function SignInPage() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, register } = useAuth();
   const { t } = useLanguage();
   const { redirect: redirectTo } = Route.useSearch();
 
@@ -64,7 +63,7 @@ function SignInPage() {
 
     setIsSigningIn(true);
     try {
-      const result = login(signInEmail, signInPassword);
+      const result = await login(signInEmail, signInPassword);
       if (result.success) {
         toast.success(t("auth.welcomeBack", { name: result.session.name }));
         navigate({ to: resolvePostLoginRedirect(result.session.role, redirectTo) });
@@ -99,29 +98,19 @@ function SignInPage() {
 
     setIsRegistering(true);
     try {
-      if (findUserByEmail(signUpEmail)) {
-        toast.error(t("auth.emailExists"));
-        setIsRegistering(false);
-        return;
-      }
-
-      saveCustomUser({
+      const result = await register({
         name: signUpName,
         email: signUpEmail,
         password: signUpPassword,
-        role: "user",
-        office: "Public",
-        status: "Active",
       });
 
-      toast.success(t("auth.accountCreated"));
-
-      const loginResult = login(signUpEmail, signUpPassword);
-      if (loginResult.success) {
-        navigate({ to: resolvePostLoginRedirect(loginResult.session.role, redirectTo) });
+      if (result.success) {
+        toast.success(t("auth.accountCreated"));
+        navigate({ to: resolvePostLoginRedirect(result.session.role, redirectTo) });
+      } else if (result.error === "invalid_credentials") {
+        toast.error(t("auth.emailExists"));
       } else {
-        setMode("signIn");
-        setSignInEmail(signUpEmail);
+        toast.error(t("auth.registerError"));
       }
     } catch {
       toast.error(t("auth.registerError"));

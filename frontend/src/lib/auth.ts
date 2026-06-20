@@ -1,75 +1,62 @@
-import { findUserByEmail, userAccounts, type UserRole } from "@/lib/user-accounts";
+import { api, getToken, setToken, removeToken } from "@/lib/api-client";
+import type { UserRole } from "@/lib/user-accounts";
 
-const AUTH_SESSION_KEY = "govlingua-auth-session";
-const AUTH_USER_ID_KEY = "govlingua-auth-user-id";
-const AUTH_EMAIL_KEY = "govlingua-auth-email";
-const AUTH_NAME_KEY = "govlingua-auth-name";
-const AUTH_ROLE_KEY = "govlingua-auth-role";
-const AUTH_OFFICE_KEY = "govlingua-auth-office";
-
-/** Temporary development mode — set to false when enabling strict credential checks. */
-export const USE_RELAXED_AUTH = false;
+const SESSION_KEY = "govlingua-session";
 
 export type AuthSession = {
-  userId: number;
+  userId: string;
   email: string;
   name: string;
   role: UserRole;
   office: string;
 };
 
+type BackendUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: "ADMIN" | "USER" | "EMPLOYEE";
+  office: string;
+  status: string;
+  createdAt: string;
+};
+
+function mapRole(backendRole: string): UserRole {
+  switch (backendRole) {
+    case "ADMIN": return "admin";
+    case "EMPLOYEE": return "employee";
+    default: return "user";
+  }
+}
+
+function toSession(user: BackendUser): AuthSession {
+  return {
+    userId: user.id,
+    email: user.email,
+    name: user.name,
+    role: mapRole(user.role),
+    office: user.office,
+  };
+}
+
 function persistSession(session: AuthSession): void {
-  localStorage.setItem(AUTH_SESSION_KEY, "true");
-  localStorage.setItem(AUTH_USER_ID_KEY, String(session.userId));
-  localStorage.setItem(AUTH_EMAIL_KEY, session.email);
-  localStorage.setItem(AUTH_NAME_KEY, session.name);
-  localStorage.setItem(AUTH_ROLE_KEY, session.role);
-  localStorage.setItem(AUTH_OFFICE_KEY, session.office);
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
 }
 
 function readSession(): AuthSession | null {
   if (typeof window === "undefined") return null;
+  const token = getToken();
+  if (!token) return null;
 
-  if (localStorage.getItem(AUTH_SESSION_KEY) !== "true") {
-    return null;
-  }
+  const stored = localStorage.getItem(SESSION_KEY);
+  if (!stored) return null;
 
-  const userId = Number(localStorage.getItem(AUTH_USER_ID_KEY));
-  const email = localStorage.getItem(AUTH_EMAIL_KEY);
-  const name = localStorage.getItem(AUTH_NAME_KEY);
-  const role = localStorage.getItem(AUTH_ROLE_KEY) as UserRole | null;
-  const office = localStorage.getItem(AUTH_OFFICE_KEY);
-
-  if (!userId || !email || !name || !role || !office) {
+  try {
+    return JSON.parse(stored) as AuthSession;
+  } catch {
     signOut();
     return null;
   }
-
-  if (role !== "admin" && role !== "user") {
-    signOut();
-    return null;
-  }
-
-  if (USE_RELAXED_AUTH) {
-    return { userId, email, name, role, office };
-  }
-
-  const account = userAccounts.find((entry) => entry.id === userId);
-  if (!account || account.status === "Disabled") {
-    signOut();
-    return null;
-  }
-
-  const session: AuthSession = {
-    userId: account.id,
-    email: account.email,
-    name: account.name,
-    role: account.role,
-    office: account.office,
-  };
-
-  persistSession(session);
-  return session;
 }
 
 export function isAuthenticated(): boolean {
@@ -90,9 +77,9 @@ export function getAuthRole(): UserRole | null {
 
 export type SignInResult =
   | { success: true; session: AuthSession }
-  | { success: false; error: "missing_fields" | "invalid_credentials" | "account_disabled" };
+  | { success: false; error: "missing_fields" | "invalid_credentials" | "account_disabled" | "network_error" };
 
-export function signIn(email: string, password: string): SignInResult {
+export async function signIn(email: string, password: string): Promise<SignInResult> {
   const trimmedEmail = email.trim();
   const trimmedPassword = password.trim();
 
@@ -100,84 +87,60 @@ export function signIn(email: string, password: string): SignInResult {
     return { success: false, error: "missing_fields" };
   }
 
-  if (USE_RELAXED_AUTH) {
-    const account = findUserByEmail(trimmedEmail);
-    const session: AuthSession = account
-      ? {
-          userId: account.id,
-          email: account.email,
-          name: account.name,
-          role: account.role,
-          office: account.office,
-        }
-      : {
-          userId: 0,
-          email: trimmedEmail,
-          name: trimmedEmail.split("@")[0] || "User",
-          role: "user",
-          office: "Development",
-        };
+  try {
+    const data = await api.post<{ user: BackendUser; token: string }>("/auth/login", {
+      email: trimmedEmail,
+      password: trimmedPassword,
+    });
 
+    setToken(data.token);
+    const session = toSession(data.user);
     persistSession(session);
     return { success: true, session };
+  } catch (err: any) {
+    if (err?.status === 403) {
+      return { success: false, error: "account_disabled" };
+    }
+    if (err?.status === 401) {
+      return { success: false, error: "invalid_credentials" };
+    }
+    return { success: false, error: "network_error" };
   }
-
-  const account = findUserByEmail(trimmedEmail);
-
-  if (!account || account.password !== trimmedPassword) {
-    return { success: false, error: "invalid_credentials" };
-  }
-
-  if (account.status === "Disabled") {
-    return { success: false, error: "account_disabled" };
-  }
-
-  const session: AuthSession = {
-    userId: account.id,
-    email: account.email,
-    name: account.name,
-    role: account.role,
-    office: account.office,
-  };
-
-  persistSession(session);
-
-  return {
-    success: true,
-    session,
-  };
 }
 
-export function signInWithDefaultAccount(): SignInResult {
-  return signInWithMockAccount("user");
+export async function signUp(data: {
+  name: string;
+  email: string;
+  password: string;
+  office?: string;
+}): Promise<SignInResult> {
+  try {
+    const result = await api.post<{ user: BackendUser; token: string }>("/auth/register", data);
+    setToken(result.token);
+    const session = toSession(result.user);
+    persistSession(session);
+    return { success: true, session };
+  } catch (err: any) {
+    if (err?.status === 409) {
+      return { success: false, error: "invalid_credentials" };
+    }
+    return { success: false, error: "network_error" };
+  }
 }
 
-export function signInWithMockAccount(role: UserRole): SignInResult {
-  const account =
-    userAccounts.find((entry) => entry.status === "Active" && entry.role === role) ??
-    userAccounts.find((entry) => entry.status === "Active");
-
-  if (!account) {
-    return { success: false, error: "invalid_credentials" };
+export async function refreshSession(): Promise<AuthSession | null> {
+  try {
+    const user = await api.get<BackendUser>("/auth/me");
+    const session = toSession(user);
+    persistSession(session);
+    return session;
+  } catch {
+    signOut();
+    return null;
   }
-
-  const session: AuthSession = {
-    userId: account.id,
-    email: account.email,
-    name: account.name,
-    role: account.role,
-    office: account.office,
-  };
-
-  persistSession(session);
-  return { success: true, session };
 }
 
 export function signOut(): void {
-  localStorage.removeItem(AUTH_SESSION_KEY);
-  localStorage.removeItem(AUTH_USER_ID_KEY);
-  localStorage.removeItem(AUTH_EMAIL_KEY);
-  localStorage.removeItem(AUTH_NAME_KEY);
-  localStorage.removeItem(AUTH_ROLE_KEY);
-  localStorage.removeItem(AUTH_OFFICE_KEY);
+  removeToken();
+  localStorage.removeItem(SESSION_KEY);
 }
