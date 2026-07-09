@@ -156,7 +156,7 @@ function AdminSystemSettings() {
           <CardHeader>
             <CardTitle className="text-base font-bold">Notification Settings</CardTitle>
             <p className="text-xs text-muted-foreground">
-              Email and in-app alerts for administrators and platform activity.
+              In-app alerts for administrators and platform activity.
             </p>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

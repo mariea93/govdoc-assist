@@ -19,7 +19,12 @@ enum UserStatus {
   DISABLED
 }
 
-enum DocumentAction {
+enum SourceType {
+  FILE
+  TEXT
+}
+
+enum ProcessingOption {
   SUMMARIZE
   TRANSLATE
   SUMMARIZE_TRANSLATE
@@ -32,7 +37,7 @@ enum DocumentStatus {
   FAILED
 }
 
-enum ValidationAction {
+enum ValidationOption {
   APPROVE
   REJECT
   IMPROVEMENT
@@ -50,17 +55,15 @@ model User {
   email        String     @unique
   passwordHash String
   role         Role       @default(USER)
-  office       String     @default("Public")
   status       UserStatus @default(ACTIVE)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  preferences         UserPreferences?
-  organizationProfile OrganizationProfile?
-  documents           Document[]
-  validations         ValidationRecord[]
-  activityLogs        ActivityLog[]
-  reports             Report[]
+  preferences  UserPreferences?
+  documents    Document[]
+  validations  Validation[]
+  activityLogs ActivityLog[]
+  reports      Report[]
 
   @@map("users")
 }
@@ -72,7 +75,7 @@ model UserPreferences {
   defaultSourceLanguage String  @default("Kinyarwanda")
   defaultTargetLanguage String  @default("English")
   defaultSummaryLength  String  @default("medium")
-  emailNotifications    Boolean @default(true)
+  inAppNotifications    Boolean @default(true)
   processingAlerts      Boolean @default(true)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -80,71 +83,45 @@ model UserPreferences {
   @@map("user_preferences")
 }
 
-model OrganizationProfile {
-  id               String  @id @default(cuid())
-  userId           String  @unique
-  organizationName String  @default("")
-  department       String  @default("")
-  province         String  @default("")
-  district         String  @default("")
-  sector           String  @default("")
-  contactEmail     String  @default("")
-  contactPhone     String  @default("")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("organization_profiles")
-}
-
 model Document {
-  id             String         @id @default(cuid())
-  referenceId    String         @unique
-  fileName       String
-  originalName   String
-  fileSize       Int
-  mimeType       String
-  sourceLanguage String
-  targetLanguage String
-  action         DocumentAction
-  status         DocumentStatus @default(PENDING)
-  qualityScore   Float?
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  id               String           @id @default(cuid())
+  documentName     String
+  originalName     String
+  fileSize         Int
+  mimeType         String
+  sourceType       SourceType       @default(FILE)
+  sourceLanguage   String
+  targetLanguage   String
+  processingOption ProcessingOption
+  status           DocumentStatus   @default(PENDING)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  // AI Output Fields (Merged from ProcessingResult)
+  summary     String?
+  translation String?
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  processingResult ProcessingResult?
-  validations      ValidationRecord[]
+  validations Validation[]
 
   @@map("documents")
 }
 
-model ProcessingResult {
-  id          String   @id @default(cuid())
-  documentId  String   @unique
-  summary     String?
-  translation String?
-  generatedAt DateTime @default(now())
-
-  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
-
-  @@map("processing_results")
-}
-
-model ValidationRecord {
-  id         String           @id @default(cuid())
-  documentId String
-  userId     String
-  action     ValidationAction
-  feedback   String?
-  notes      String?
-  createdAt  DateTime         @default(now())
+model Validation {
+  id               String           @id @default(cuid())
+  documentId       String
+  userId           String
+  validationOption ValidationOption
+  feedback         String?
+  notes            String?
+  createdAt        DateTime         @default(now())
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@map("validation_records")
+  @@map("validations")
 }
 
 model ActivityLog {
@@ -162,8 +139,14 @@ model ActivityLog {
 }
 
 model SystemSettings {
-  id                      String  @id @default(cuid())
-  organizationName        String  @default("MINALOC")
+  id String @id @default(cuid())
+
+  // Organization Details (Global)
+  organizationName String @default("MINALOC")
+  province         String @default("")
+  contactEmail     String @default("")
+
+  // Global Defaults & Configurations
   defaultSourceLanguage   String  @default("Kinyarwanda")
   defaultTargetLanguage   String  @default("English")
   maxFileSize             Int     @default(10)
@@ -171,7 +154,7 @@ model SystemSettings {
   minPasswordLength       Int     @default(8)
   requireSpecialChar      Boolean @default(true)
   sessionTimeout          Int     @default(30)
-  enableEmailNotification Boolean @default(true)
+  enableInAppNotification Boolean @default(true)
   enableProcessingAlerts  Boolean @default(true)
   maintenanceMode         Boolean @default(false)
 
@@ -185,9 +168,8 @@ model Report {
   id         String       @id @default(cuid())
   reportName String
   period     String
-  type       String       @default("general")
   status     ReportStatus @default(DRAFT)
-  content    Json?
+  filePath   String
   createdBy  String
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @updatedAt

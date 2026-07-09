@@ -38,7 +38,7 @@ type DashboardData = {
   failed: number;
   pendingValidations: number;
   totalUsers: number;
-  recentDocuments: { id: string; name: string; source: string; target: string; action: string; date: string; status: string }[];
+  recentDocuments: { id: string; dbId: string; name: string; source: string; target: string; action: string; date: string; status: string }[];
   actionBreakdown: { action: string; count: number }[];
   languageBreakdown: { language: string; count: number }[];
 };
@@ -74,7 +74,7 @@ function Dashboard() {
     return (
       <div className="space-y-6 animate-fade-in">
         <div className="flex flex-col gap-1">
-          <h1 className="font-display text-3xl font-bold tracking-tight">{t("dashboard.greeting")}</h1>
+          <h1 className="font-display text-3xl font-bold tracking-tight">{t("dashboard.greeting", { name: session?.name ?? "" })}</h1>
           <p className="text-muted-foreground">{t("dashboard.subtitle")}</p>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -132,7 +132,7 @@ function Dashboard() {
               <span className="font-semibold text-sm text-[#b08711] dark:text-[#cbb580]">{t("sidebar.translate")}</span>
               <span className="text-xs text-muted-foreground leading-relaxed">{t("employee.translateDesc")}</span>
             </Link>
-            <Link to="/review-validate" className="flex flex-col gap-2 rounded-xl p-5 border bg-purple-50/70 border-purple-100 hover:shadow-md transition cursor-pointer dark:bg-purple-950/20 dark:border-purple-900/30">
+            <Link to="/review-validate" search={{ doc: undefined }} className="flex flex-col gap-2 rounded-xl p-5 border bg-purple-50/70 border-purple-100 hover:shadow-md transition cursor-pointer dark:bg-purple-950/20 dark:border-purple-900/30">
               <span className="font-semibold text-sm text-[#6b21a8] dark:text-[#c4a8c0]">{t("sidebar.reviewValidate")}</span>
               <span className="text-xs text-muted-foreground leading-relaxed">{t("employee.reviewDesc")}</span>
             </Link>
@@ -178,9 +178,17 @@ function Dashboard() {
                 <TableBody>
                   {data.recentDocuments.map((d) => (
                     <TableRow key={d.id}>
-                      <TableCell className="font-medium">{d.name}</TableCell>
+                      <TableCell className="font-medium">
+                        <Link
+                          to="/review-validate"
+                          search={{ doc: d.dbId }}
+                          className="hover:underline text-[#163a5f] dark:text-[#3d6a94] cursor-pointer"
+                        >
+                          {d.name}
+                        </Link>
+                      </TableCell>
                       <TableCell>{d.action}</TableCell>
-                      <TableCell><StatusBadge status={d.status} /></TableCell>
+                      <TableCell><StatusBadge status={d.status as any} /></TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -214,7 +222,7 @@ function Dashboard() {
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col gap-1">
         <h1 className="font-display text-3xl font-bold tracking-tight">
-          {t("dashboard.greeting")}
+          {t("dashboard.greeting", { name: session?.name ?? "" })}
         </h1>
         <p className="text-muted-foreground">{t("dashboard.subtitle")}</p>
       </div>
@@ -296,9 +304,17 @@ function Dashboard() {
               <TableBody>
                 {data.recentDocuments.map((d) => (
                   <TableRow key={d.id}>
-                    <TableCell className="font-medium">{d.name}</TableCell>
+                    <TableCell className="font-medium">
+                      <Link
+                        to="/results"
+                        search={{ doc: d.dbId }}
+                        className="hover:underline text-[#163a5f] dark:text-[#3d6a94] cursor-pointer"
+                      >
+                        {d.name}
+                      </Link>
+                    </TableCell>
                     <TableCell>{d.action}</TableCell>
-                    <TableCell><StatusBadge status={d.status} /></TableCell>
+                    <TableCell><StatusBadge status={d.status as any} /></TableCell>
                   </TableRow>
                 ))}
               </TableBody>

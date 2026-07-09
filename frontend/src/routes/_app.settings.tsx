@@ -51,12 +51,8 @@ function Settings() {
 
   // Organization
   const [orgName, setOrgName] = useState("");
-  const [orgDepartment, setOrgDepartment] = useState("");
   const [orgProvince, setOrgProvince] = useState("");
-  const [orgDistrict, setOrgDistrict] = useState("");
-  const [orgSector, setOrgSector] = useState("");
   const [orgEmail, setOrgEmail] = useState("");
-  const [orgPhone, setOrgPhone] = useState("");
 
   useEffect(() => {
     if (session) {
@@ -80,12 +76,8 @@ function Settings() {
         setProcessingAlerts(prefs.processingAlerts ?? true);
 
         setOrgName(org.organizationName || "");
-        setOrgDepartment(org.department || "");
         setOrgProvince(org.province || "");
-        setOrgDistrict(org.district || "");
-        setOrgSector(org.sector || "");
         setOrgEmail(org.contactEmail || "");
-        setOrgPhone(org.contactPhone || "");
       } catch {
         toast.error("Failed to load settings");
       } finally {
@@ -165,13 +157,8 @@ function Settings() {
     setSavingOrg(true);
     try {
       await api.patch("/users/me/organization", {
-        organizationName: orgName,
-        department: orgDepartment,
         province: orgProvince,
-        district: orgDistrict,
-        sector: orgSector,
         contactEmail: orgEmail,
-        contactPhone: orgPhone,
       });
       toast.success("Organization saved successfully");
     } catch {
@@ -270,10 +257,9 @@ function Settings() {
                 <Field label="Full Name" value={profileName} onChange={(e) => setProfileName(e.target.value)} />
                 <Field label="Email" type="email" value={profileEmail} readOnly disabled />
                 <Field label="Role" defaultValue={session ? getRoleLabel(session.role) : ""} readOnly disabled />
-                <Field label="Office" defaultValue={session?.office ?? ""} readOnly disabled />
               </div>
               <p className="text-xs text-muted-foreground">
-                Email, role and office are managed by your administrator.
+                Email and role are managed by your administrator.
               </p>
               <div className="flex justify-end">
                 <Button onClick={updateProfile} disabled={savingProfile}>
@@ -305,14 +291,13 @@ function Settings() {
             <CardHeader><CardTitle>Organization</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Organization Name" value={orgName} onChange={(e) => setOrgName(e.target.value)} placeholder="e.g. MINALOC" />
-                <Field label="Department" value={orgDepartment} onChange={(e) => setOrgDepartment(e.target.value)} placeholder="e.g. IT Services" />
+                <Field label="Organization Name" value={orgName} readOnly disabled placeholder="e.g. MINALOC" />
                 <Field label="Province" value={orgProvince} onChange={(e) => setOrgProvince(e.target.value)} placeholder="e.g. Kigali City" />
-                <Field label="District" value={orgDistrict} onChange={(e) => setOrgDistrict(e.target.value)} placeholder="e.g. Nyarugenge" />
-                <Field label="Sector" value={orgSector} onChange={(e) => setOrgSector(e.target.value)} placeholder="e.g. Muhima" />
                 <Field label="Contact Email" type="email" value={orgEmail} onChange={(e) => setOrgEmail(e.target.value)} placeholder="e.g. info@org.gov.rw" />
-                <Field label="Contact Phone" value={orgPhone} onChange={(e) => setOrgPhone(e.target.value)} placeholder="e.g. +250 788 000 000" />
               </div>
+              <p className="text-xs text-muted-foreground">
+                Organization name is assigned by your administrator.
+              </p>
               <div className="flex justify-end">
                 <Button onClick={saveOrganization} disabled={savingOrg}>
                   {savingOrg ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...</> : "Save organization"}

@@ -1,7 +1,21 @@
 import bcrypt from "bcryptjs";
+import fs from "fs";
+import path from "path";
 import { prisma } from "../config/database.js";
+import { env } from "../config/env.js";
 import { AppError } from "../middleware/error-handler.js";
-import { Role, UserStatus } from "@prisma/client";
+import { Role, UserStatus, ReportStatus } from "@prisma/client";
+
+function getOfficeByRole(role: Role): string {
+  switch (role) {
+    case "ADMIN":
+      return "GovLingua HQ";
+    case "EMPLOYEE":
+      return "MINALOC HQ";
+    default:
+      return "Public";
+  }
+}
 
 export async function getUsers(params: {
   page?: number;
@@ -32,7 +46,6 @@ export async function getUsers(params: {
         name: true,
         email: true,
         role: true,
-        office: true,
         status: true,
         createdAt: true,
         _count: { select: { documents: true } },
@@ -50,7 +63,7 @@ export async function getUsers(params: {
       name: u.name,
       email: u.email,
       role: u.role,
-      office: u.office,
+      office: getOfficeByRole(u.role),
       status: u.status,
       createdAt: u.createdAt,
       documentCount: u._count.documents,
@@ -67,7 +80,6 @@ export async function getUserById(userId: string) {
       name: true,
       email: true,
       role: true,
-      office: true,
       status: true,
       createdAt: true,
       updatedAt: true,
@@ -75,7 +87,10 @@ export async function getUserById(userId: string) {
     },
   });
   if (!user) throw new AppError(404, "User not found");
-  return user;
+  return {
+    ...user,
+    office: getOfficeByRole(user.role),
+  };
 }
 
 export async function createUser(data: {
@@ -85,24 +100,34 @@ export async function createUser(data: {
   role: Role;
   office?: string;
 }) {
-  const existing = await prisma.user.findUnique({ where: { email: data.email } });
+  const email = data.email.trim().toLowerCase();
+  const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) throw new AppError(409, "Email already registered");
 
   const passwordHash = await bcrypt.hash(data.password, 12);
   const user = await prisma.user.create({
     data: {
       name: data.name,
-      email: data.email,
+      email,
       passwordHash,
       role: data.role,
-      office: data.office || "Public",
       preferences: { create: {} },
-      organizationProfile: { create: {} },
     },
-    select: { id: true, name: true, email: true, role: true, office: true, status: true, createdAt: true },
+    select: { id: true, name: true, email: true, role: true, status: true, createdAt: true },
   });
 
-  return user;
+  await prisma.activityLog.create({
+    data: {
+      userId: user.id,
+      action: "ADMIN_CREATE_USER",
+      details: `Account created by admin with role ${user.role}`,
+    },
+  });
+
+  return {
+    ...user,
+    office: getOfficeByRole(user.role),
+  };
 }
 
 export async function updateUser(userId: string, data: {
@@ -119,22 +144,33 @@ export async function updateUser(userId: string, data: {
     if (existing) throw new AppError(409, "Email already in use");
   }
 
-  return prisma.user.update({
+  const { office, ...updateData } = data;
+  const updatedUser = await prisma.user.update({
     where: { id: userId },
-    data,
-    select: { id: true, name: true, email: true, role: true, office: true, status: true, createdAt: true },
+    data: updateData,
+    select: { id: true, name: true, email: true, role: true, status: true, createdAt: true },
   });
+
+  return {
+    ...updatedUser,
+    office: getOfficeByRole(updatedUser.role),
+  };
 }
 
 export async function updateUserStatus(userId: string, status: UserStatus) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new AppError(404, "User not found");
 
-  return prisma.user.update({
+  const updatedUser = await prisma.user.update({
     where: { id: userId },
     data: { status },
-    select: { id: true, name: true, email: true, role: true, office: true, status: true },
+    select: { id: true, name: true, email: true, role: true, status: true },
   });
+
+  return {
+    ...updatedUser,
+    office: getOfficeByRole(updatedUser.role),
+  };
 }
 
 export async function deleteUser(userId: string) {
@@ -149,7 +185,10 @@ export async function getSystemSettings() {
   if (!settings) {
     settings = await prisma.systemSettings.create({ data: {} });
   }
-  return settings;
+  return {
+    ...settings,
+    enableEmailNotification: settings.enableInAppNotification,
+  };
 }
 
 export async function updateSystemSettings(data: {
@@ -169,7 +208,22 @@ export async function updateSystemSettings(data: {
   if (!settings) {
     settings = await prisma.systemSettings.create({ data: {} });
   }
-  return prisma.systemSettings.update({ where: { id: settings.id }, data });
+
+  const prismaData: any = { ...data };
+  if (data.enableEmailNotification !== undefined) {
+    prismaData.enableInAppNotification = data.enableEmailNotification;
+    delete prismaData.enableEmailNotification;
+  }
+
+  const updated = await prisma.systemSettings.update({
+    where: { id: settings.id },
+    data: prismaData,
+  });
+
+  return {
+    ...updated,
+    enableEmailNotification: updated.enableInAppNotification,
+  };
 }
 
 export async function getActivityLog(params: { page?: number; limit?: number; userId?: string }) {
@@ -191,7 +245,34 @@ export async function getActivityLog(params: { page?: number; limit?: number; us
     prisma.activityLog.count({ where }),
   ]);
 
-  return { logs, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
+  const mappedLogs = await Promise.all(
+    logs.map(async (log) => {
+      let comment = "-";
+      if (log.action === "VALIDATION" && log.metadata && typeof log.metadata === "object") {
+        const metadata = log.metadata as Record<string, any>;
+        const documentId = metadata.documentId;
+        if (documentId) {
+          const val = await prisma.validation.findFirst({
+            where: {
+              documentId,
+              userId: log.userId,
+            },
+            orderBy: { createdAt: "desc" },
+            select: { feedback: true, notes: true },
+          });
+          if (val) {
+            comment = val.feedback || val.notes || "-";
+          }
+        }
+      }
+      return {
+        ...log,
+        comment,
+      };
+    })
+  );
+
+  return { logs: mappedLogs, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
 }
 
 export async function getReports(params: { page?: number; limit?: number; status?: string }) {
@@ -217,11 +298,21 @@ export async function getReports(params: { page?: number; limit?: number; status
 }
 
 export async function createReport(data: { reportName: string; period: string; type?: string; createdBy: string }) {
+  const fileName = `report-${Date.now()}.txt`;
+  const uploadDir = path.resolve(env.UPLOAD_DIR);
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  }
+  const fullPath = path.join(uploadDir, fileName);
+  const content = `Report Name: ${data.reportName}\nPeriod: ${data.period}\nGenerated At: ${new Date().toISOString()}\nCreated By: ${data.createdBy}\n`;
+  fs.writeFileSync(fullPath, content);
+
   return prisma.report.create({
     data: {
       reportName: data.reportName,
       period: data.period,
-      type: data.type || "general",
+      status: "DRAFT" as ReportStatus,
+      filePath: fileName,
       createdBy: data.createdBy,
     },
     include: { user: { select: { name: true } } },
@@ -235,7 +326,6 @@ export async function updateReport(reportId: string, data: { reportName?: string
   const updateData: any = {};
   if (data.reportName) updateData.reportName = data.reportName;
   if (data.status) updateData.status = data.status.toUpperCase();
-  if (data.content) updateData.content = data.content;
 
   return prisma.report.update({ where: { id: reportId }, data: updateData });
 }
@@ -248,12 +338,14 @@ export async function deleteReport(reportId: string) {
 }
 
 export async function getAnalyticsSummary() {
-  const [totalUsers, totalDocs, completedDocs, usersByRole, docsByAction] = await Promise.all([
+  const [totalUsers, totalDocs, completedDocs, summariesGenerated, translationsGenerated, usersByRole, docsByAction] = await Promise.all([
     prisma.user.count(),
     prisma.document.count(),
     prisma.document.count({ where: { status: "COMPLETED" } }),
+    prisma.document.count({ where: { status: "COMPLETED", processingOption: { in: ["SUMMARIZE", "SUMMARIZE_TRANSLATE"] } } }),
+    prisma.document.count({ where: { status: "COMPLETED", processingOption: { in: ["TRANSLATE", "SUMMARIZE_TRANSLATE"] } } }),
     prisma.user.groupBy({ by: ["role"], _count: { id: true } }),
-    prisma.document.groupBy({ by: ["action"], _count: { id: true } }),
+    prisma.document.groupBy({ by: ["processingOption"], _count: { id: true } }),
   ]);
 
   const thirtyDaysAgo = new Date();
@@ -267,10 +359,17 @@ export async function getAnalyticsSummary() {
     totalUsers,
     totalDocuments: totalDocs,
     completedDocuments: completedDocs,
+    summariesGenerated,
+    translationsGenerated,
     successRate: totalDocs > 0 ? Math.round((completedDocs / totalDocs) * 100) : 0,
     documentsLast30Days: recentActivity,
-    usersByRole: usersByRole.map((r) => ({ role: r.role, count: r._count.id })),
-    documentsByAction: docsByAction.map((d) => ({ action: d.action, count: d._count.id })),
+    usersByRole: usersByRole.map((r) => ({ role: r.role, count: r._count.id || 0 })),
+    documentsByAction: docsByAction.map((d) => ({
+      action: d.processingOption === "SUMMARIZE_TRANSLATE"
+        ? "SUMMARIZE_TRANSLATE"
+        : d.processingOption === "SUMMARIZE" ? "SUMMARIZE" : "TRANSLATE",
+      count: d._count.id || 0,
+    })),
   };
 }
 
@@ -281,7 +380,58 @@ export async function getLanguageDistribution() {
   ]);
 
   return {
-    source: sourceLanguages.map((l) => ({ language: l.sourceLanguage, count: l._count.id })),
-    target: targetLanguages.map((l) => ({ language: l.targetLanguage, count: l._count.id })),
+    source: sourceLanguages.map((l) => ({ language: l.sourceLanguage, count: l._count.id || 0 })),
+    target: targetLanguages.map((l) => ({ language: l.targetLanguage, count: l._count.id || 0 })),
   };
 }
+
+export async function getWeeklyStats() {
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+  const [users, documents] = await Promise.all([
+    prisma.user.findMany({
+      where: { createdAt: { gte: sevenDaysAgo } },
+      select: { createdAt: true },
+    }),
+    prisma.document.findMany({
+      where: { createdAt: { gte: sevenDaysAgo } },
+      select: { createdAt: true, status: true, processingOption: true },
+    }),
+  ]);
+
+  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const order = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const activity = order.map((day) => ({
+    name: day,
+    signups: 0,
+    documents: 0,
+    summaries: 0,
+    translations: 0,
+  }));
+
+  users.forEach((u) => {
+    const dayName = days[u.createdAt.getDay()];
+    const entry = activity.find((a) => a.name === dayName);
+    if (entry) entry.signups++;
+  });
+
+  documents.forEach((d) => {
+    const dayName = days[d.createdAt.getDay()];
+    const entry = activity.find((a) => a.name === dayName);
+    if (entry) {
+      entry.documents++;
+      if (d.status === "COMPLETED") {
+        if (d.processingOption === "SUMMARIZE" || d.processingOption === "SUMMARIZE_TRANSLATE") {
+          entry.summaries++;
+        }
+        if (d.processingOption === "TRANSLATE" || d.processingOption === "SUMMARIZE_TRANSLATE") {
+          entry.translations++;
+        }
+      }
+    }
+  });
+
+  return activity;
+}
+

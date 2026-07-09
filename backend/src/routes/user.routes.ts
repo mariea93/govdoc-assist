@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import * as userService from "../services/user.service.js";
-import { authenticate } from "../middleware/auth.js";
+import { authenticate, authorize } from "../middleware/auth.js";
 
 const router = Router();
 
@@ -52,7 +52,7 @@ router.get("/organization", authenticate, async (req: Request, res: Response, ne
   }
 });
 
-router.patch("/organization", authenticate, async (req: Request, res: Response, next: NextFunction) => {
+router.patch("/organization", authenticate, authorize("ADMIN"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const data = organizationSchema.parse(req.body);
     const profile = await userService.updateOrganizationProfile(req.user!.id, data);

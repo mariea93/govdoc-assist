@@ -6,7 +6,7 @@ import { authenticate, authorize } from "../middleware/auth.js";
 const router = Router();
 
 const validationSchema = z.object({
-  action: z.enum(["approve", "reject", "improvement"]),
+  action: z.enum(["approve", "reject", "improvement"]).optional(),
   feedback: z.string().optional(),
   notes: z.string().optional(),
 });
@@ -22,7 +22,7 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { page, limit } = req.query;
-      const result = await validationService.getDocumentsForReview(req.user!.id, {
+      const result = await validationService.getDocumentsForReview(req.user!.id, req.user!.role, {
         page: page ? Number(page) : undefined,
         limit: limit ? Number(limit) : undefined,
       });
@@ -36,13 +36,14 @@ router.get(
 router.post(
   "/:documentId/validation",
   authenticate,
-  authorize("EMPLOYEE", "ADMIN"),
+  authorize("EMPLOYEE", "ADMIN", "USER"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const data = validationSchema.parse(req.body);
       const result = await validationService.createValidation({
-        documentId: req.params.documentId,
+        documentId: req.params.documentId as string,
         userId: req.user!.id,
+        role: req.user!.role,
         ...data,
       });
       res.status(201).json(result);
@@ -57,7 +58,11 @@ router.get(
   authenticate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await validationService.getValidations(req.params.documentId);
+      const result = await validationService.getValidations(
+        req.params.documentId as string,
+        req.user!.id,
+        req.user!.role
+      );
       res.json(result);
     } catch (error) {
       next(error);
@@ -73,8 +78,9 @@ router.post(
     try {
       const data = noteSchema.parse(req.body);
       const result = await validationService.addValidationNote({
-        documentId: req.params.documentId,
+        documentId: req.params.documentId as string,
         userId: req.user!.id,
+        role: req.user!.role,
         notes: data.notes,
       });
       res.status(201).json(result);

@@ -11,14 +11,25 @@ function generateToken(userId: string, role: Role): string {
   return jwt.sign(payload, env.JWT_SECRET, { expiresIn: env.JWT_EXPIRES_IN } as jwt.SignOptions);
 }
 
+function getOfficeByRole(role: Role): string {
+  switch (role) {
+    case "ADMIN":
+      return "GovLingua HQ";
+    case "EMPLOYEE":
+      return "MINALOC HQ";
+    default:
+      return "Public";
+  }
+}
+
 export async function register(data: {
   name: string;
   email: string;
   password: string;
-  role?: Role;
   office?: string;
 }) {
-  const existing = await prisma.user.findUnique({ where: { email: data.email } });
+  const email = data.email.trim().toLowerCase();
+  const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
     throw new AppError(409, "Email already registered");
   }
@@ -27,14 +38,12 @@ export async function register(data: {
   const user = await prisma.user.create({
     data: {
       name: data.name,
-      email: data.email,
+      email,
       passwordHash,
-      role: data.role || "USER",
-      office: data.office || "Public",
+      role: "USER",
       preferences: { create: {} },
-      organizationProfile: { create: {} },
     },
-    select: { id: true, name: true, email: true, role: true, office: true, status: true, createdAt: true },
+    select: { id: true, name: true, email: true, role: true, status: true, createdAt: true },
   });
 
   await prisma.activityLog.create({
@@ -42,11 +51,18 @@ export async function register(data: {
   });
 
   const token = generateToken(user.id, user.role);
-  return { user, token };
+  return {
+    user: {
+      ...user,
+      office: getOfficeByRole(user.role),
+    },
+    token,
+  };
 }
 
 export async function login(email: string, password: string) {
-  const user = await prisma.user.findUnique({ where: { email } });
+  const normalizedEmail = email.trim().toLowerCase();
+  const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
   if (!user) {
     throw new AppError(401, "Invalid email or password");
   }
@@ -71,7 +87,7 @@ export async function login(email: string, password: string) {
       name: user.name,
       email: user.email,
       role: user.role,
-      office: user.office,
+      office: getOfficeByRole(user.role),
       status: user.status,
       createdAt: user.createdAt,
     },
@@ -87,14 +103,16 @@ export async function getProfile(userId: string) {
       name: true,
       email: true,
       role: true,
-      office: true,
       status: true,
       createdAt: true,
       updatedAt: true,
     },
   });
   if (!user) throw new AppError(404, "User not found");
-  return user;
+  return {
+    ...user,
+    office: getOfficeByRole(user.role),
+  };
 }
 
 export async function changePassword(userId: string, currentPassword: string, newPassword: string) {
@@ -122,11 +140,19 @@ export async function updateProfile(userId: string, data: { name?: string; email
     if (existing) throw new AppError(409, "Email already in use");
   }
 
+  const { office, ...updateData } = data;
   const user = await prisma.user.update({
     where: { id: userId },
-    data,
-    select: { id: true, name: true, email: true, role: true, office: true, status: true, createdAt: true },
+    data: updateData,
+    select: { id: true, name: true, email: true, role: true, status: true, createdAt: true },
   });
 
-  return user;
+  await prisma.activityLog.create({
+    data: { userId, action: "PROFILE_UPDATE", details: "Profile updated" },
+  });
+
+  return {
+    ...user,
+    office: getOfficeByRole(user.role),
+  };
 }

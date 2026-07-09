@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,13 +19,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { AccountStatusBadge } from "@/components/AccountStatusBadge";
+import { AddEmployeeDialog } from "@/components/admin/AddEmployeeDialog";
+import { getRoleLabel, type UserAccount, type UserRole } from "@/lib/user-accounts";
 import {
-  getRoleLabel,
-  userAccounts,
-  type UserAccount,
-  type UserRole,
-} from "@/lib/user-accounts";
-import { Plus, Search, UserCog, UserMinus, UserPlus } from "lucide-react";
+  mapApiUser,
+  toApiStatus,
+  type AdminUserRow,
+  type ApiAdminUser,
+} from "@/lib/admin-users";
+import { api } from "@/lib/api-client";
+import { Plus, Search, UserCog, UserMinus, UserPlus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/admin/users")({
@@ -35,32 +38,28 @@ export const Route = createFileRoute("/admin/users")({
 
 type RoleFilter = "all" | UserRole;
 
-const seedUsers: UserAccount[] = [
-  ...userAccounts,
-  {
-    id: 901,
-    name: "Marie Uwimana",
-    email: "marie.u@kigali.gov.rw",
-    password: "",
-    role: "employee",
-    office: "Kigali District",
-    status: "Invited",
-  },
-  {
-    id: 902,
-    name: "Patrick Nkurunziza",
-    email: "patrick.n@gov.rw",
-    password: "",
-    role: "user",
-    office: "Public Portal",
-    status: "Invited",
-  },
-];
-
 function AdminUsers() {
-  const [users, setUsers] = useState<UserAccount[]>(seedUsers);
+  const [users, setUsers] = useState<AdminUserRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
+  const [addUserOpen, setAddUserOpen] = useState(false);
+
+  const loadUsers = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await api.get<{ users: ApiAdminUser[] }>("/admin/users?limit=100");
+      setUsers(data.users.map(mapApiUser));
+    } catch {
+      toast.error("Failed to load users");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadUsers();
+  }, [loadUsers]);
 
   const stats = useMemo(() => ({
     active: users.filter((u) => u.status === "Active").length,
@@ -81,9 +80,14 @@ function AdminUsers() {
     });
   }, [users, search, roleFilter]);
 
-  const updateStatus = (id: number, status: UserAccount["status"]) => {
-    setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, status } : u)));
-    toast.success(`Account ${status === "Active" ? "enabled" : status === "Disabled" ? "disabled" : "updated"}`);
+  const updateStatus = async (id: string, status: UserAccount["status"]) => {
+    try {
+      await api.patch(`/admin/users/${id}/status`, { status: toApiStatus(status) });
+      toast.success(`Account ${status === "Active" ? "enabled" : status === "Disabled" ? "disabled" : "updated"}`);
+      await loadUsers();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to update account status");
+    }
   };
 
   return (
@@ -117,7 +121,7 @@ function AdminUsers() {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="text-base font-bold">User Accounts</CardTitle>
             <Button
-              onClick={() => toast.info("Add User form would open here")}
+              onClick={() => setAddUserOpen(true)}
               className="bg-[#163a5f] hover:bg-[#163a5f]/95 text-white font-semibold shadow-md"
             >
               <Plus className="mr-2 h-4 w-4" /> Add User
@@ -147,75 +151,87 @@ function AdminUsers() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="min-w-[160px]">Name</TableHead>
-                  <TableHead className="min-w-[220px]">Email</TableHead>
-                  <TableHead className="w-[120px]">Role</TableHead>
-                  <TableHead className="w-[120px]">Status</TableHead>
-                  <TableHead className="text-right min-w-[220px]">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredUsers.length === 0 ? (
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={5} className="py-10 text-center text-muted-foreground">
-                      No users match your search or filter.
-                    </TableCell>
+                    <TableHead className="min-w-[160px]">Name</TableHead>
+                    <TableHead className="min-w-[220px]">Email</TableHead>
+                    <TableHead className="w-[120px]">Role</TableHead>
+                    <TableHead className="w-[120px]">Status</TableHead>
+                    <TableHead className="text-right min-w-[220px]">Actions</TableHead>
                   </TableRow>
-                ) : (
-                  filteredUsers.map((user) => (
-                    <TableRow key={user.id}>
-                      <TableCell className="font-semibold text-sm text-[#163a5f] dark:text-[#3d6a94]">
-                        {user.name}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{user.email}</TableCell>
-                      <TableCell className="text-sm font-medium">{getRoleLabel(user.role)}</TableCell>
-                      <TableCell>
-                        <AccountStatusBadge status={user.status} />
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 text-xs"
-                            onClick={() => toast.message(`Edit ${user.name}`, { description: "User edit dialog would open here." })}
-                          >
-                            <UserCog className="mr-1 h-3.5 w-3.5" /> Edit
-                          </Button>
-                          {user.status !== "Active" && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 text-xs text-[var(--brand-green)]"
-                              onClick={() => updateStatus(user.id, "Active")}
-                            >
-                              <UserPlus className="mr-1 h-3.5 w-3.5" /> Enable
-                            </Button>
-                          )}
-                          {user.status !== "Disabled" && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 text-xs text-destructive"
-                              onClick={() => updateStatus(user.id, "Disabled")}
-                            >
-                              <UserMinus className="mr-1 h-3.5 w-3.5" /> Disable
-                            </Button>
-                          )}
-                        </div>
+                </TableHeader>
+                <TableBody>
+                  {filteredUsers.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="py-10 text-center text-muted-foreground">
+                        No users match your search or filter.
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                  ) : (
+                    filteredUsers.map((user) => (
+                      <TableRow key={user.id}>
+                        <TableCell className="font-semibold text-sm text-[#163a5f] dark:text-[#3d6a94]">
+                          {user.name}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{user.email}</TableCell>
+                        <TableCell className="text-sm font-medium">{getRoleLabel(user.role)}</TableCell>
+                        <TableCell>
+                          <AccountStatusBadge status={user.status} />
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 text-xs"
+                              onClick={() => toast.message(`Edit ${user.name}`, { description: "User edit dialog would open here." })}
+                            >
+                              <UserCog className="mr-1 h-3.5 w-3.5" /> Edit
+                            </Button>
+                            {user.status !== "Active" && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 text-xs text-[var(--brand-green)]"
+                                onClick={() => updateStatus(user.id, "Active")}
+                              >
+                                <UserPlus className="mr-1 h-3.5 w-3.5" /> Enable
+                              </Button>
+                            )}
+                            {user.status !== "Disabled" && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 text-xs text-destructive"
+                                onClick={() => updateStatus(user.id, "Disabled")}
+                              >
+                                <UserMinus className="mr-1 h-3.5 w-3.5" /> Disable
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      <AddEmployeeDialog
+        open={addUserOpen}
+        onOpenChange={setAddUserOpen}
+        onCreated={loadUsers}
+      />
     </div>
   );
 }

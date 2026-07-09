@@ -86,7 +86,7 @@ const en = {
   "sidebar.users": "Users",
   "sidebar.settings": "Settings",
   "sidebar.footer": "© 2026 GovLingua AI",
-  "dashboard.greeting": "Hello, Uwase 👋",
+  "dashboard.greeting": "Hello, {name}",
   "dashboard.subtitle": "Upload, summarize and translate government documents efficiently",
   "dashboard.documentsProcessed": "Documents",
   "dashboard.summariesGenerated": "Summaries",
@@ -395,7 +395,7 @@ const en = {
   "admin.reports.activeUsers": "Active Users",
   "admin.reports.languageDistribution": "Language Distribution",
   "admin.reports.exportStarted": "Export started",
-  "employee.greeting": "Hello, {name} 👋",
+  "employee.greeting": "Hello, {name}",
   "employee.subtitle": "Manage, review and process government documents efficiently",
   "employee.documentsProcessed": "Documents Processed",
   "employee.totalDocuments": "Total documents",
@@ -422,7 +422,6 @@ const en = {
   "admin.dashboard.recentLogs": "Recent System Logs",
   "admin.dashboard.colUserTrigger": "User / Trigger",
   "admin.dashboard.colActionLogged": "Action Logged",
-  "admin.dashboard.viewFullLog": "View Full Activity Log",
 } as const;
 
 const rw: Record<keyof typeof en, string> = {
@@ -503,7 +502,7 @@ const rw: Record<keyof typeof en, string> = {
   "sidebar.users": "Abakoresha",
   "sidebar.settings": "Igenamiterere",
   "sidebar.footer": "© 2026 GovLingua AI",
-  "dashboard.greeting": "Muraho neza, Uwase 👋",
+  "dashboard.greeting": "Muraho neza, {name}",
   "dashboard.subtitle": "Ohereza, fata incamake kandi uhindure inyandiko za leta mu buryo bwihuse",
   "dashboard.documentsProcessed": "Inyandiko",
   "dashboard.summariesGenerated": "Incamake",
@@ -812,7 +811,7 @@ const rw: Record<keyof typeof en, string> = {
   "admin.reports.activeUsers": "Abakoresha Bakora",
   "admin.reports.languageDistribution": "Itandukaniro ry'Indimi",
   "admin.reports.exportStarted": "Gukuramo byatangiye",
-  "employee.greeting": "Muraho neza, {name} 👋",
+  "employee.greeting": "Muraho neza, {name}",
   "employee.subtitle": "Genzura, suzuma kandi utunganye inyandiko za leta mu buryo bwihuse",
   "employee.documentsProcessed": "Inyandiko Zatunganijwe",
   "employee.totalDocuments": "Inyandiko zose",
@@ -839,7 +838,6 @@ const rw: Record<keyof typeof en, string> = {
   "admin.dashboard.recentLogs": "Inyandiko za Sisitemu za Vuba",
   "admin.dashboard.colUserTrigger": "Umukoresha / Itangiriro",
   "admin.dashboard.colActionLogged": "Igikorwa Cyanditswe",
-  "admin.dashboard.viewFullLog": "Reba Inyandiko y'Ibikorwa Byose",
 };
 
 const fr: Record<keyof typeof en, string> = {
@@ -920,7 +918,7 @@ const fr: Record<keyof typeof en, string> = {
   "sidebar.users": "Utilisateurs",
   "sidebar.settings": "Paramètres",
   "sidebar.footer": "© 2026 GovLingua AI",
-  "dashboard.greeting": "Bonjour, Uwase 👋",
+  "dashboard.greeting": "Bonjour, {name}",
   "dashboard.subtitle": "Téléchargez, résumez et traduisez efficacement les documents gouvernementaux",
   "dashboard.documentsProcessed": "Documents",
   "dashboard.summariesGenerated": "Résumés",
@@ -1229,7 +1227,7 @@ const fr: Record<keyof typeof en, string> = {
   "admin.reports.activeUsers": "Utilisateurs actifs",
   "admin.reports.languageDistribution": "Répartition des langues",
   "admin.reports.exportStarted": "Export démarré",
-  "employee.greeting": "Bonjour, {name} 👋",
+  "employee.greeting": "Bonjour, {name}",
   "employee.subtitle": "Gérez, révisez et traitez les documents gouvernementaux efficacement",
   "employee.documentsProcessed": "Documents traités",
   "employee.totalDocuments": "Total des documents",
@@ -1256,7 +1254,6 @@ const fr: Record<keyof typeof en, string> = {
   "admin.dashboard.recentLogs": "Journaux système récents",
   "admin.dashboard.colUserTrigger": "Utilisateur / Déclencheur",
   "admin.dashboard.colActionLogged": "Action enregistrée",
-  "admin.dashboard.viewFullLog": "Voir le journal d'activité complet",
 } as const;
 
 export type TranslationKey = keyof typeof en;

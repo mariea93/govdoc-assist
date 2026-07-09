@@ -1,8 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -10,14 +9,11 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from "@/components/ui/dialog";
-import { Eye, FileText, Search, Copy, X, Loader2 } from "lucide-react";
+import { FileText, Search } from "lucide-react";
 import { LANGUAGES } from "@/lib/mock-data";
 import { StatusBadge } from "@/components/StatusBadge";
 import { api } from "@/lib/api-client";
-import { toast } from "sonner";
+import { useAuth } from "@/contexts/auth-context";
 
 export const Route = createFileRoute("/_app/history")({
   head: () => ({ meta: [{ title: "History · GovLingua AI" }] }),
@@ -32,24 +28,23 @@ type DocItem = {
   target: string;
   action: string;
   date: string;
+  time?: string;
   status: string;
   size: string;
-  qualityScore?: number | null;
-  processingResult?: {
-    summary?: string;
-    translation?: string;
-    generatedAt?: string;
-  } | null;
+  validationStatus: string;
 };
 
-function History() {
+function displayTarget(action: string, target: string) {
+  return action === "Summarize" ? "-" : target;
+}
+
+export function History() {
+  const { role } = useAuth();
   const [q, setQ] = useState("");
   const [lang, setLang] = useState("all");
   const [action, setAction] = useState("all");
   const [documents, setDocuments] = useState<DocItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedDoc, setSelectedDoc] = useState<DocItem | null>(null);
-  const [loadingDetail, setLoadingDetail] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -64,19 +59,6 @@ function History() {
     }
     load();
   }, []);
-
-  const viewDocument = async (doc: DocItem) => {
-    setLoadingDetail(true);
-    setSelectedDoc(doc);
-    try {
-      const detail = await api.get<DocItem>(`/documents/${doc.dbId}`);
-      setSelectedDoc(detail);
-    } catch {
-      toast.error("Failed to load document details");
-    } finally {
-      setLoadingDetail(false);
-    }
-  };
 
   const filtered = documents.filter((d) => {
     if (q && !d.name.toLowerCase().includes(q.toLowerCase())) return false;
@@ -132,44 +114,65 @@ function History() {
                     <TableHead>Original</TableHead>
                     <TableHead>Target</TableHead>
                     <TableHead>Action</TableHead>
+                    <TableHead>Validation</TableHead>
                     <TableHead>Date</TableHead>
+                    <TableHead>Time</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filtered.map((d) => (
                     <TableRow key={d.id}>
                       <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
+                        <Link
+                          to={role === "employee" ? "/review-validate" : "/results"}
+                          search={{ doc: d.dbId }}
+                          className="flex items-center gap-2 hover:underline text-[#163a5f] dark:text-[#3d6a94] cursor-pointer"
+                        >
                           <FileText className="h-4 w-4 text-muted-foreground" />
                           <div>
                             <div>{d.name}</div>
                             <div className="text-xs text-muted-foreground/50">{d.id} · {d.size}</div>
                           </div>
-                        </div>
+                        </Link>
                       </TableCell>
                       <TableCell><Badge variant="outline">{d.source}</Badge></TableCell>
-                      <TableCell><Badge variant="outline">{d.target}</Badge></TableCell>
-                      <TableCell>{d.action}</TableCell>
-                      <TableCell className="text-muted-foreground">{d.date}</TableCell>
-                      <TableCell><StatusBadge status={d.status} /></TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          aria-label="View document"
-                          onClick={() => viewDocument(d)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
+                      <TableCell>
+                        {displayTarget(d.action, d.target) === "-" ? (
+                          <span className="text-muted-foreground">-</span>
+                        ) : (
+                          <Badge variant="outline">{d.target}</Badge>
+                        )}
                       </TableCell>
+                      <TableCell>{d.action}</TableCell>
+                      <TableCell>
+                        {d.validationStatus === "-" ? (
+                          <span className="text-muted-foreground">-</span>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className={
+                              d.validationStatus === "Approved"
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-800"
+                                : d.validationStatus === "Rejected"
+                                  ? "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-800"
+                                  : d.validationStatus === "Improvement Requested"
+                                    ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-800"
+                                    : "bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-900/30 dark:text-slate-400 dark:border-slate-800"
+                            }
+                          >
+                            {d.validationStatus}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{d.date}</TableCell>
+                      <TableCell className="text-muted-foreground">{d.time ?? "—"}</TableCell>
+                      <TableCell><StatusBadge status={d.status as any} /></TableCell>
                     </TableRow>
                   ))}
                   {filtered.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={7} className="py-12 text-center text-muted-foreground">No documents match your filters.</TableCell>
+                      <TableCell colSpan={8} className="py-12 text-center text-muted-foreground">No documents match your filters.</TableCell>
                     </TableRow>
                   )}
                 </TableBody>
@@ -178,101 +181,6 @@ function History() {
           )}
         </CardContent>
       </Card>
-
-      <Dialog open={!!selectedDoc} onOpenChange={(open) => { if (!open) setSelectedDoc(null); }}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              {selectedDoc?.name}
-            </DialogTitle>
-          </DialogHeader>
-
-          {loadingDetail ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : selectedDoc ? (
-            <div className="space-y-5">
-              <div className="grid grid-cols-2 gap-4 rounded-lg border p-4 bg-muted/30">
-                <InfoItem label="Reference" value={selectedDoc.id} />
-                <InfoItem label="Status" value={selectedDoc.status} />
-                <InfoItem label="Source Language" value={selectedDoc.source} />
-                <InfoItem label="Target Language" value={selectedDoc.target} />
-                <InfoItem label="Action" value={selectedDoc.action} />
-                <InfoItem label="Date" value={selectedDoc.date} />
-                <InfoItem label="File Size" value={selectedDoc.size} />
-                {selectedDoc.qualityScore && (
-                  <InfoItem label="Quality Score" value={`${selectedDoc.qualityScore}%`} />
-                )}
-              </div>
-
-              {selectedDoc.processingResult?.summary && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-semibold text-sm">AI Summary</h4>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 gap-1.5 text-xs"
-                      onClick={() => {
-                        navigator.clipboard.writeText(selectedDoc.processingResult!.summary!);
-                        toast.success("Summary copied");
-                      }}
-                    >
-                      <Copy className="h-3 w-3" /> Copy
-                    </Button>
-                  </div>
-                  <div className="rounded-lg border bg-muted/20 p-4 text-sm leading-relaxed">
-                    {selectedDoc.processingResult.summary}
-                  </div>
-                </div>
-              )}
-
-              {selectedDoc.processingResult?.translation && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-semibold text-sm">Translation</h4>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 gap-1.5 text-xs"
-                      onClick={() => {
-                        navigator.clipboard.writeText(selectedDoc.processingResult!.translation!);
-                        toast.success("Translation copied");
-                      }}
-                    >
-                      <Copy className="h-3 w-3" /> Copy
-                    </Button>
-                  </div>
-                  <div className="rounded-lg border bg-muted/20 p-4 text-sm leading-relaxed">
-                    {selectedDoc.processingResult.translation}
-                  </div>
-                </div>
-              )}
-
-              {!selectedDoc.processingResult?.summary && !selectedDoc.processingResult?.translation && (
-                <div className="rounded-lg border border-dashed p-6 text-center text-muted-foreground text-sm">
-                  {selectedDoc.status === "Processing"
-                    ? "This document is currently being processed by the AI service."
-                    : selectedDoc.status === "Failed"
-                      ? "Processing failed for this document. Please try uploading again."
-                      : "No results available yet."}
-                </div>
-              )}
-            </div>
-          ) : null}
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
-
-function InfoItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="text-xs text-muted-foreground font-medium">{label}</div>
-      <div className="mt-0.5 text-sm font-semibold">{value}</div>
     </div>
   );
 }

@@ -1,13 +1,25 @@
 import { prisma } from "../config/database.js";
 import { AppError } from "../middleware/error-handler.js";
-import { DocumentAction, DocumentStatus, Role } from "@prisma/client";
+import { ProcessingOption, DocumentStatus, Role } from "@prisma/client";
 import { env } from "../config/env.js";
+import { applyDocumentScope } from "../utils/document-scope.js";
 import { writeFileSync, mkdirSync, readFileSync, existsSync } from "fs";
 import { join, resolve } from "path";
 
-function generateReferenceId(): string {
-  const num = Math.floor(1000 + Math.random() * 9000);
-  return `DOC-${num}`;
+function getReferenceId(doc: { id: string }): string {
+  if (doc.id.startsWith("DOC-")) return doc.id;
+  return `DOC-${doc.id.slice(-4).toUpperCase()}`;
+}
+
+function getOfficeByRole(role: Role): string {
+  switch (role) {
+    case "ADMIN":
+      return "GovLingua HQ";
+    case "EMPLOYEE":
+      return "MINALOC HQ";
+    default:
+      return "Public";
+  }
 }
 
 async function notifyAIService(payload: {
@@ -17,6 +29,7 @@ async function notifyAIService(payload: {
   action: string;
   sourceLanguage: string;
   targetLanguage: string;
+  summaryLength?: string;
 }) {
   try {
     await fetch(`${env.AI_SERVICE_URL}/process`, {
@@ -29,7 +42,7 @@ async function notifyAIService(payload: {
   }
 }
 
-function mapAction(action: string): DocumentAction {
+function mapAction(action: string): ProcessingOption {
   switch (action) {
     case "summarize":
       return "SUMMARIZE";
@@ -49,18 +62,31 @@ function formatFileSize(bytes: number): string {
 }
 
 function formatDocument(doc: any) {
+  let validationStatus = "-";
+  if (doc.status === "COMPLETED") {
+    if (doc.validations && doc.validations.length > 0) {
+      const latestVal = doc.validations[0].validationOption;
+      if (latestVal === "APPROVE") validationStatus = "Approved";
+      else if (latestVal === "REJECT") validationStatus = "Rejected";
+      else if (latestVal === "IMPROVEMENT") validationStatus = "Improvement Requested";
+    } else {
+      validationStatus = "-";
+    }
+  }
+
   return {
-    id: doc.referenceId,
+    id: getReferenceId(doc),
     dbId: doc.id,
     name: doc.originalName,
     source: doc.sourceLanguage,
     target: doc.targetLanguage,
-    action: doc.action === "SUMMARIZE_TRANSLATE"
+    action: doc.processingOption === "SUMMARIZE_TRANSLATE"
       ? "Summarize + Translate"
-      : doc.action === "SUMMARIZE"
+      : doc.processingOption === "SUMMARIZE"
         ? "Summarize"
         : "Translate",
-    date: doc.createdAt.toISOString().split("T")[0],
+    date: doc.createdAt.toLocaleDateString("en-CA", { timeZone: "Africa/Kigali" }),
+    time: doc.createdAt.toLocaleTimeString("en-GB", { timeZone: "Africa/Kigali" }).slice(0, 5),
     status: doc.status === "COMPLETED"
       ? "Completed"
       : doc.status === "PROCESSING"
@@ -69,8 +95,17 @@ function formatDocument(doc: any) {
           ? "Failed"
           : "Pending",
     size: formatFileSize(doc.fileSize),
-    qualityScore: doc.qualityScore,
-    processingResult: doc.processingResult || null,
+    qualityScore: null,
+    processingResult: (doc.summary || doc.translation) ? {
+      summary: doc.summary,
+      translation: doc.translation,
+    } : null,
+    user: doc.user ? {
+      name: doc.user.name,
+      email: doc.user.email,
+      role: doc.user.role,
+    } : null,
+    validationStatus,
   };
 }
 
@@ -83,25 +118,20 @@ export async function uploadDocument(data: {
   sourceLanguage: string;
   targetLanguage: string;
   action: string;
+  summaryLength?: string;
 }) {
-  let referenceId = generateReferenceId();
-  const existing = await prisma.document.findUnique({ where: { referenceId } });
-  if (existing) referenceId = generateReferenceId();
-
   const document = await prisma.document.create({
     data: {
-      referenceId,
-      fileName: data.fileName,
+      documentName: data.fileName,
       originalName: data.originalName,
       fileSize: data.fileSize,
       mimeType: data.mimeType,
       sourceLanguage: data.sourceLanguage,
       targetLanguage: data.targetLanguage,
-      action: mapAction(data.action),
+      processingOption: mapAction(data.action),
       status: "PENDING",
       userId: data.userId,
     },
-    include: { processingResult: true },
   });
 
   await prisma.activityLog.create({
@@ -109,17 +139,24 @@ export async function uploadDocument(data: {
       userId: data.userId,
       action: "DOCUMENT_UPLOAD",
       details: `Uploaded ${data.originalName}`,
-      metadata: { documentId: document.id, referenceId },
+      metadata: { documentId: document.id, referenceId: getReferenceId(document) },
     },
   });
 
+  let resolvedSummaryLength = data.summaryLength;
+  if (!resolvedSummaryLength) {
+    const prefs = await prisma.userPreferences.findUnique({ where: { userId: data.userId } });
+    resolvedSummaryLength = prefs?.defaultSummaryLength || "medium";
+  }
+
   notifyAIService({
     documentId: document.id,
-    referenceId,
+    referenceId: getReferenceId(document),
     fileName: data.fileName,
     action: data.action,
     sourceLanguage: data.sourceLanguage,
     targetLanguage: data.targetLanguage,
+    summaryLength: resolvedSummaryLength,
   });
 
   return formatDocument(document);
@@ -131,11 +168,8 @@ export async function submitText(data: {
   sourceLanguage: string;
   targetLanguage: string;
   action: string;
+  summaryLength?: string;
 }) {
-  let referenceId = generateReferenceId();
-  const existing = await prisma.document.findUnique({ where: { referenceId } });
-  if (existing) referenceId = generateReferenceId();
-
   const textBuffer = Buffer.from(data.text, "utf-8");
   const fileName = `text-${Date.now()}.txt`;
 
@@ -145,18 +179,17 @@ export async function submitText(data: {
 
   const document = await prisma.document.create({
     data: {
-      referenceId,
-      fileName,
+      documentName: fileName,
       originalName: `Text Input (${data.action})`,
       fileSize: textBuffer.length,
       mimeType: "text/plain",
+      sourceType: "TEXT",
       sourceLanguage: data.sourceLanguage,
       targetLanguage: data.targetLanguage,
-      action: mapAction(data.action),
+      processingOption: mapAction(data.action),
       status: "PENDING",
       userId: data.userId,
     },
-    include: { processingResult: true },
   });
 
   await prisma.activityLog.create({
@@ -164,17 +197,24 @@ export async function submitText(data: {
       userId: data.userId,
       action: "TEXT_SUBMIT",
       details: `Submitted text for ${data.action}`,
-      metadata: { documentId: document.id, referenceId },
+      metadata: { documentId: document.id, referenceId: getReferenceId(document) },
     },
   });
 
+  let resolvedSummaryLength = data.summaryLength;
+  if (!resolvedSummaryLength) {
+    const prefs = await prisma.userPreferences.findUnique({ where: { userId: data.userId } });
+    resolvedSummaryLength = prefs?.defaultSummaryLength || "medium";
+  }
+
   notifyAIService({
     documentId: document.id,
-    referenceId,
+    referenceId: getReferenceId(document),
     fileName,
     action: data.action,
     sourceLanguage: data.sourceLanguage,
     targetLanguage: data.targetLanguage,
+    summaryLength: resolvedSummaryLength,
   });
 
   return formatDocument(document);
@@ -191,29 +231,28 @@ export async function getDocuments(userId: string, role: Role, params: {
   const limit = params.limit || 20;
   const skip = (page - 1) * limit;
 
-  const where: any = {};
-
-  if (role === "USER") {
-    where.userId = userId;
-  }
+  const where: any = applyDocumentScope({}, userId, role);
 
   if (params.status) {
     where.status = params.status.toUpperCase();
   }
   if (params.action) {
-    where.action = mapAction(params.action);
+    where.processingOption = mapAction(params.action);
   }
   if (params.search) {
     where.OR = [
       { originalName: { contains: params.search, mode: "insensitive" } },
-      { referenceId: { contains: params.search, mode: "insensitive" } },
+      { id: { contains: params.search, mode: "insensitive" } },
     ];
   }
 
   const [documents, total] = await Promise.all([
     prisma.document.findMany({
       where,
-      include: { processingResult: true, user: { select: { name: true, email: true } } },
+      include: {
+        user: { select: { name: true, email: true, role: true } },
+        validations: { select: { validationOption: true }, orderBy: { createdAt: "desc" } }
+      },
       orderBy: { createdAt: "desc" },
       skip,
       take: limit,
@@ -229,19 +268,34 @@ export async function getDocuments(userId: string, role: Role, params: {
 
 export async function getDocumentById(documentId: string, userId: string, role: Role) {
   const document = await prisma.document.findFirst({
-    where: {
-      OR: [{ id: documentId }, { referenceId: documentId }],
-      ...(role === "USER" ? { userId } : {}),
-    },
+    where: applyDocumentScope({ id: documentId }, userId, role),
     include: {
-      processingResult: true,
-      validations: { include: { user: { select: { name: true } } }, orderBy: { createdAt: "desc" } },
-      user: { select: { name: true, email: true, office: true } },
+      validations: { include: { user: { select: { name: true, role: true } } }, orderBy: { createdAt: "desc" } },
+      user: { select: { name: true, email: true, role: true } },
     },
   });
 
   if (!document) throw new AppError(404, "Document not found");
-  return formatDocument(document);
+  
+  const formatted = formatDocument(document);
+  return {
+    ...formatted,
+    submittedBy: document.user ? {
+      name: document.user.name,
+      email: document.user.email,
+      office: getOfficeByRole(document.user.role),
+    } : null,
+    validations: document.validations.map((v) => ({
+      id: v.id,
+      documentId: v.documentId,
+      userId: v.userId,
+      action: v.validationOption,
+      feedback: v.feedback,
+      notes: v.notes,
+      createdAt: v.createdAt,
+      user: v.user,
+    })) || [],
+  };
 }
 
 export async function updateDocument(documentId: string, userId: string, role: Role, data: {
@@ -250,10 +304,7 @@ export async function updateDocument(documentId: string, userId: string, role: R
   action?: string;
 }) {
   const document = await prisma.document.findFirst({
-    where: {
-      OR: [{ id: documentId }, { referenceId: documentId }],
-      ...(role === "USER" ? { userId } : {}),
-    },
+    where: applyDocumentScope({ id: documentId }, userId, role),
   });
 
   if (!document) throw new AppError(404, "Document not found");
@@ -266,9 +317,8 @@ export async function updateDocument(documentId: string, userId: string, role: R
     data: {
       ...(data.sourceLanguage && { sourceLanguage: data.sourceLanguage }),
       ...(data.targetLanguage && { targetLanguage: data.targetLanguage }),
-      ...(data.action && { action: mapAction(data.action) }),
+      ...(data.action && { processingOption: mapAction(data.action) }),
     },
-    include: { processingResult: true },
   });
 
   return formatDocument(updated);
@@ -276,10 +326,7 @@ export async function updateDocument(documentId: string, userId: string, role: R
 
 export async function deleteDocument(documentId: string, userId: string, role: Role) {
   const document = await prisma.document.findFirst({
-    where: {
-      OR: [{ id: documentId }, { referenceId: documentId }],
-      ...(role === "USER" ? { userId } : {}),
-    },
+    where: applyDocumentScope({ id: documentId }, userId, role),
   });
 
   if (!document) throw new AppError(404, "Document not found");
@@ -290,7 +337,7 @@ export async function deleteDocument(documentId: string, userId: string, role: R
     data: {
       userId,
       action: "DOCUMENT_DELETE",
-      details: `Deleted document ${document.referenceId}`,
+      details: `Deleted document ${getReferenceId(document)}`,
     },
   });
 
@@ -304,37 +351,20 @@ export async function updateProcessingStatus(documentId: string, data: {
   qualityScore?: number;
 }) {
   const document = await prisma.document.findFirst({
-    where: { OR: [{ id: documentId }, { referenceId: documentId }] },
+    where: { id: documentId },
   });
 
   if (!document) throw new AppError(404, "Document not found");
 
   const status = data.status.toUpperCase() as DocumentStatus;
 
-  await prisma.document.update({
+  const updated = await prisma.document.update({
     where: { id: document.id },
-    data: { status, qualityScore: data.qualityScore },
-  });
-
-  if (data.summary || data.translation) {
-    await prisma.processingResult.upsert({
-      where: { documentId: document.id },
-      create: {
-        documentId: document.id,
-        summary: data.summary,
-        translation: data.translation,
-      },
-      update: {
-        summary: data.summary,
-        translation: data.translation,
-        generatedAt: new Date(),
-      },
-    });
-  }
-
-  const updated = await prisma.document.findUnique({
-    where: { id: document.id },
-    include: { processingResult: true },
+    data: {
+      status,
+      summary: data.summary,
+      translation: data.translation,
+    },
   });
 
   return formatDocument(updated);
@@ -342,12 +372,12 @@ export async function updateProcessingStatus(documentId: string, data: {
 
 export async function getDocumentContent(documentId: string) {
   const document = await prisma.document.findFirst({
-    where: { OR: [{ id: documentId }, { referenceId: documentId }] },
+    where: { id: documentId },
   });
 
   if (!document) throw new AppError(404, "Document not found");
 
-  const filePath = join(resolve(env.UPLOAD_DIR), document.fileName);
+  const filePath = join(resolve(env.UPLOAD_DIR), document.documentName);
   if (!existsSync(filePath)) throw new AppError(404, "File not found on disk");
 
   const content = readFileSync(filePath);

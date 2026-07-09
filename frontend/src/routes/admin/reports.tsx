@@ -25,6 +25,8 @@ import {
 } from "recharts";
 import { Download, FileText } from "lucide-react";
 import { toast } from "sonner";
+import { api } from "@/lib/api-client";
+import { exportAuditLogPDF, exportReportsCSV } from "@/lib/download-helper";
 
 export const Route = createFileRoute("/admin/reports")({
   head: () => ({ meta: [{ title: "Reports & Analytics · GovLingua AI" }] }),
@@ -64,6 +66,30 @@ const reportOverview = [
 ];
 
 function AdminReports() {
+  const handleExportAuditLog = async () => {
+    try {
+      const toastId = toast.loading("Generating Audit Log PDF...");
+      const data = await api.get<{ logs: any[] }>("/admin/logs?limit=10000");
+      exportAuditLogPDF(data.logs);
+      toast.dismiss(toastId);
+      toast.success("Audit Log PDF exported successfully!");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to export audit log");
+    }
+  };
+
+  const handleDownloadCSV = async () => {
+    try {
+      const toastId = toast.loading("Generating CSV Report...");
+      const data = await api.get<{ documents: any[] }>("/documents?limit=100000");
+      exportReportsCSV(data.documents);
+      toast.dismiss(toastId);
+      toast.success("CSV Report downloaded successfully!");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to download CSV report");
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col gap-1">
@@ -238,15 +264,15 @@ function AdminReports() {
           </div>
           <div className="flex flex-wrap justify-center gap-3">
             <Button
-              onClick={() => toast.info("PDF audit log export started")}
-              className="bg-[#163a5f] hover:bg-[#163a5f]/95 text-white font-semibold rounded-full px-6 py-2.5 shadow-md"
+              onClick={handleExportAuditLog}
+              className="bg-[#163a5f] hover:bg-[#163a5f]/95 text-white font-semibold rounded-full px-6 py-2.5 shadow-md cursor-pointer"
             >
               <FileText className="mr-2 h-4 w-4" /> Export PDF Audit Log
             </Button>
             <Button
               variant="outline"
-              onClick={() => toast.success("CSV report downloaded")}
-              className="font-semibold rounded-full px-6 py-2.5"
+              onClick={handleDownloadCSV}
+              className="font-semibold rounded-full px-6 py-2.5 cursor-pointer"
             >
               <Download className="mr-2 h-4 w-4" /> Download CSV Report
             </Button>

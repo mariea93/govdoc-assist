@@ -4,6 +4,7 @@ import * as documentService from "../services/document.service.js";
 import { authenticate, authorize } from "../middleware/auth.js";
 import { upload } from "../middleware/upload.js";
 import { env } from "../config/env.js";
+import { prisma } from "../config/database.js";
 
 const router = Router();
 
@@ -12,6 +13,7 @@ const textSubmitSchema = z.object({
   sourceLanguage: z.string().min(1),
   targetLanguage: z.string().min(1),
   action: z.enum(["summarize", "translate", "summarize_translate"]),
+  summaryLength: z.enum(["short", "medium", "detailed"]).optional(),
 });
 
 const updateDocSchema = z.object({
@@ -37,7 +39,7 @@ router.post(
         res.status(400).json({ error: "No file uploaded" });
         return;
       }
-      const { sourceLanguage, targetLanguage, action } = req.body;
+      const { sourceLanguage, targetLanguage, action, summaryLength } = req.body;
       if (!sourceLanguage || !targetLanguage || !action) {
         res.status(400).json({ error: "sourceLanguage, targetLanguage, and action are required" });
         return;
@@ -52,6 +54,7 @@ router.post(
         sourceLanguage,
         targetLanguage,
         action,
+        summaryLength,
       });
       res.status(201).json(result);
     } catch (error) {
@@ -109,6 +112,90 @@ router.get("/history", authenticate, async (req: Request, res: Response, next: N
   }
 });
 
+router.get("/notifications", authenticate, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (req.user!.role === "ADMIN") {
+      const logs = await prisma.activityLog.findMany({
+        where: {
+          action: {
+            notIn: ["DOCUMENT_UPLOAD", "TEXT_SUBMIT", "VALIDATION"],
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+      });
+
+      const notifications = logs.map((log) => {
+        let message = log.details || "";
+        if (log.action === "LOGIN") {
+          message = "User login detected";
+        } else if (log.action === "PASSWORD_CHANGE") {
+          message = "Password changed successfully";
+        } else if (log.action === "PROFILE_UPDATE") {
+          message = "Profile updated successfully";
+        }
+        return {
+          id: log.id,
+          message,
+          createdAt: log.createdAt,
+        };
+      });
+
+      res.json({ notifications });
+      return;
+    }
+
+    const completedDocs = await prisma.document.findMany({
+      where: {
+        userId: req.user!.id,
+        status: "COMPLETED",
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 5,
+    });
+
+    const notifications: Array<{ id: string; message: string; createdAt: Date }> = [];
+    completedDocs.forEach((doc) => {
+      if (doc.sourceType === "FILE") {
+        notifications.push({
+          id: `${doc.id}-file`,
+          message: "Document processed successfully.",
+          createdAt: doc.updatedAt,
+        });
+      } else {
+        if (doc.processingOption === "SUMMARIZE") {
+          notifications.push({
+            id: `${doc.id}-sum`,
+            message: "Summary generated successfully.",
+            createdAt: doc.updatedAt,
+          });
+        } else if (doc.processingOption === "TRANSLATE") {
+          notifications.push({
+            id: `${doc.id}-trans`,
+            message: "Translation completed successfully.",
+            createdAt: doc.updatedAt,
+          });
+        } else if (doc.processingOption === "SUMMARIZE_TRANSLATE") {
+          notifications.push({
+            id: `${doc.id}-sum`,
+            message: "Summary generated successfully.",
+            createdAt: doc.updatedAt,
+          });
+          notifications.push({
+            id: `${doc.id}-trans`,
+            message: "Translation completed successfully.",
+            createdAt: doc.updatedAt,
+          });
+        }
+      }
+    });
+
+    res.json({ notifications });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get("/:id/content", (req: Request, res: Response, next: NextFunction) => {
   const apiKey = req.headers["x-processing-api-key"] as string;
   if (apiKey !== env.PROCESSING_API_KEY) {
@@ -118,7 +205,7 @@ router.get("/:id/content", (req: Request, res: Response, next: NextFunction) => 
   next();
 }, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { content, mimeType, fileName } = await documentService.getDocumentContent(req.params.id);
+    const { content, mimeType, fileName } = await documentService.getDocumentContent(req.params.id as string);
     res.setHeader("Content-Type", mimeType);
     res.setHeader("Content-Disposition", `inline; filename="${fileName}"`);
     res.send(content);
@@ -129,7 +216,7 @@ router.get("/:id/content", (req: Request, res: Response, next: NextFunction) => 
 
 router.get("/:id", authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const result = await documentService.getDocumentById(req.params.id, req.user!.id, req.user!.role);
+    const result = await documentService.getDocumentById(req.params.id as string, req.user!.id, req.user!.role);
     res.json(result);
   } catch (error) {
     next(error);
@@ -139,7 +226,7 @@ router.get("/:id", authenticate, async (req: Request, res: Response, next: NextF
 router.patch("/:id", authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const data = updateDocSchema.parse(req.body);
-    const result = await documentService.updateDocument(req.params.id, req.user!.id, req.user!.role, data);
+    const result = await documentService.updateDocument(req.params.id as string, req.user!.id, req.user!.role, data);
     res.json(result);
   } catch (error) {
     next(error);
@@ -148,7 +235,7 @@ router.patch("/:id", authenticate, async (req: Request, res: Response, next: Nex
 
 router.delete("/:id", authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const result = await documentService.deleteDocument(req.params.id, req.user!.id, req.user!.role);
+    const result = await documentService.deleteDocument(req.params.id as string, req.user!.id, req.user!.role);
     res.json(result);
   } catch (error) {
     next(error);
@@ -169,7 +256,7 @@ router.patch(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const data = processingUpdateSchema.parse(req.body);
-      const result = await documentService.updateProcessingStatus(req.params.id, data);
+      const result = await documentService.updateProcessingStatus(req.params.id as string, data);
       res.json(result);
     } catch (error) {
       next(error);

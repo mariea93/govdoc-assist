@@ -15,6 +15,10 @@ import { UploadCloud, FileText, X, Loader2 } from "lucide-react";
 import { LANGUAGES } from "@/lib/mock-data";
 import { api } from "@/lib/api-client";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/auth-context";
+import { getPostProcessRoute } from "@/lib/post-process-nav";
+import { ProcessingOverlay } from "@/components/ProcessingOverlay";
+import { waitForDocument } from "@/lib/wait-for-document";
 
 export const Route = createFileRoute("/_app/upload")({
   head: () => ({ meta: [{ title: "Upload Document · GovLingua AI" }] }),
@@ -29,8 +33,11 @@ function UploadPage() {
   const [action, setAction] = useState("both");
   const [length, setLength] = useState("medium");
   const [processing, setProcessing] = useState(false);
+  const [overlayOpen, setOverlayOpen] = useState(false);
+  const [overlayMessage, setOverlayMessage] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+  const { role } = useAuth();
 
   const handleProcess = async () => {
     if (!file) {
@@ -49,14 +56,33 @@ function UploadPage() {
       formData.append("sourceLanguage", source);
       formData.append("targetLanguage", target);
       formData.append("action", actionMap[action] || "summarize_translate");
+      if (action === "summarize" || action === "both") {
+        formData.append("summaryLength", length);
+      }
 
-      await api.upload("/documents/upload", formData);
-      toast.success("Document uploaded successfully");
-      navigate({ to: "/history" });
+      const result = await api.upload<{ dbId: string }>("/documents/upload", formData);
+      
+      setOverlayMessage(
+        action === "summarize"
+          ? "Generating summary..."
+          : action === "translate"
+            ? "Translating..."
+            : "Processing..."
+      );
+      setOverlayOpen(true);
+
+      try {
+        await waitForDocument(result.dbId);
+        toast.success("Document processed successfully");
+        navigate(getPostProcessRoute(role, result.dbId));
+      } catch (pollErr: any) {
+        toast.error(pollErr?.message || "Processing failed");
+      }
     } catch (err: any) {
       toast.error(err?.message || "Upload failed");
     } finally {
       setProcessing(false);
+      setOverlayOpen(false);
     }
   };
 
@@ -185,6 +211,7 @@ function UploadPage() {
           {processing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processing…</> : "Process Document"}
         </Button>
       </div>
+      <ProcessingOverlay open={overlayOpen} message={overlayMessage} />
     </div>
   );
 }

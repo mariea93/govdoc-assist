@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,10 @@ import { ArrowLeftRight, Copy, Download, Loader2 } from "lucide-react";
 import { LANGUAGES } from "@/lib/mock-data";
 import { api } from "@/lib/api-client";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/auth-context";
+import { getPostProcessRoute } from "@/lib/post-process-nav";
+import { ProcessingOverlay } from "@/components/ProcessingOverlay";
+import { waitForDocument } from "@/lib/wait-for-document";
 
 export const Route = createFileRoute("/_app/translate")({
   head: () => ({ meta: [{ title: "Translate Text · GovLingua AI" }] }),
@@ -17,11 +21,15 @@ export const Route = createFileRoute("/_app/translate")({
 });
 
 function TranslatePage() {
+  const navigate = useNavigate();
+  const { role } = useAuth();
   const [source, setSource] = useState("English");
   const [target, setTarget] = useState("Kinyarwanda");
   const [input, setInput] = useState("");
   const [output, setOutput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [overlayOpen, setOverlayOpen] = useState(false);
+  const [overlayMessage, setOverlayMessage] = useState("");
 
   const swap = () => {
     setSource(target);
@@ -34,18 +42,28 @@ function TranslatePage() {
     if (!input.trim()) return toast.error("Enter text to translate");
     setLoading(true);
     try {
-      const result = await api.post<any>("/documents/translate", {
+      const result = await api.post<{ dbId: string }>("/documents/translate", {
         text: input.trim(),
         sourceLanguage: source,
         targetLanguage: target,
         action: "translate",
       });
-      setOutput(`Translation submitted (${result.id}). Status: ${result.status}. The AI service will process this shortly.`);
-      toast.success("Text submitted for translation");
+
+      setOverlayMessage("Translating...");
+      setOverlayOpen(true);
+
+      try {
+        await waitForDocument(result.dbId);
+        toast.success("Text translated successfully");
+        navigate(getPostProcessRoute(role, result.dbId));
+      } catch (pollErr: any) {
+        toast.error(pollErr?.message || "Processing failed");
+      }
     } catch (err: any) {
       toast.error(err?.message || "Translation request failed");
     } finally {
       setLoading(false);
+      setOverlayOpen(false);
     }
   };
 
@@ -72,31 +90,15 @@ function TranslatePage() {
             </Select>
           </div>
 
-          <div className="mt-5 grid gap-4 md:grid-cols-2">
-            <div className="rounded-lg border">
+          <div className="mt-5">
+            <div className="rounded-lg border w-full">
               <div className="border-b px-3 py-2 text-xs font-semibold text-muted-foreground">{source}</div>
               <Textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Type or paste text…"
-                className="min-h-[300px] resize-none border-0 focus-visible:ring-0"
+                className="min-h-[300px] resize-none border-0 focus-visible:ring-0 w-full"
               />
-            </div>
-            <div className="rounded-lg border bg-muted/30">
-              <div className="flex items-center justify-between border-b px-3 py-2 text-xs font-semibold text-muted-foreground">
-                <span>{target}</span>
-                <div className="flex gap-1">
-                  <Button variant="ghost" size="icon" className="h-7 w-7" disabled={!output} onClick={() => { navigator.clipboard.writeText(output); toast.success("Copied"); }}>
-                    <Copy className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-7 w-7" disabled={!output} onClick={() => toast.success("Download started")}>
-                    <Download className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </div>
-              <div className="min-h-[300px] whitespace-pre-wrap p-3 text-sm leading-relaxed">
-                {output || <span className="text-muted-foreground">Translation will appear here.</span>}
-              </div>
             </div>
           </div>
 
@@ -107,6 +109,7 @@ function TranslatePage() {
           </div>
         </CardContent>
       </Card>
+      <ProcessingOverlay open={overlayOpen} message={overlayMessage} />
     </div>
   );
 }

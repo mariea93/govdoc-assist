@@ -2,14 +2,15 @@ import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import * as authService from "../services/auth.service.js";
 import { authenticate } from "../middleware/auth.js";
+import { validatePasswordStrength } from "../utils/password-validation.js";
+import { AppError } from "../middleware/error-handler.js";
 
 const router = Router();
 
 const registerSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Invalid email address"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
-  role: z.enum(["ADMIN", "USER", "EMPLOYEE"]).optional(),
+  password: z.string().min(1, "Password is required"),
   office: z.string().optional(),
 });
 
@@ -32,6 +33,10 @@ const updateProfileSchema = z.object({
 router.post("/register", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const data = registerSchema.parse(req.body);
+    const passwordError = validatePasswordStrength(data.password);
+    if (passwordError) {
+      throw new AppError(400, passwordError);
+    }
     const result = await authService.register(data);
     res.status(201).json(result);
   } catch (error) {

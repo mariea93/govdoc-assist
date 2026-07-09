@@ -19,9 +19,9 @@ OUTPUT FORMAT:
 - Begin directly with the substantive content"""
 
 LENGTH_INSTRUCTIONS = {
-    "short": "Produce a brief summary of approximately 80-120 words. Focus only on the most critical points and decisions.",
-    "medium": "Produce a comprehensive summary of approximately 200-300 words. Cover the main points, key decisions, and important context.",
-    "detailed": "Produce a thorough summary of approximately 400-600 words. Include all significant details, context, reasoning, and conclusions.",
+    "short": "Produce a very brief summary of strictly no more than 3 sentences (approximately 50-80 words). Focus only on the absolute most critical point or decision, keeping it extremely concise.",
+    "medium": "Produce a comprehensive summary of approximately 150-250 words. Cover the main points, key decisions, and important context in a few structured paragraphs.",
+    "detailed": "Produce a thorough and highly detailed summary of at least 400-500 words. Include all significant details, context, background information, specific figures, names, reasoning, and conclusions in full detail.",
 }
 
 

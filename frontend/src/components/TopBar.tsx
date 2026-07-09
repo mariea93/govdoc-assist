@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Bell, ChevronDown, Settings, HelpCircle, LogOut } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import {
 import { useLanguage } from "@/contexts/language-context";
 import { useAuth } from "@/contexts/auth-context";
 import { translateRole } from "@/lib/i18n";
+import { api } from "@/lib/api-client";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { HelpChatbot } from "@/components/HelpChatbot";
 
@@ -22,6 +23,25 @@ export function TopBar() {
   const navigate = useNavigate();
   const { session, logout } = useAuth();
   const [helpOpen, setHelpOpen] = useState(false);
+  const [notifications, setNotifications] = useState<{ id: string; message: string; createdAt: string }[]>([]);
+  const [appOpenedAt] = useState(() => new Date(Date.now() - 30 * 1000));
+
+  const recentNotifications = notifications.filter((n) => new Date(n.createdAt) >= appOpenedAt);
+
+  useEffect(() => {
+    if (!session) return;
+    async function loadNotifications() {
+      try {
+        const res = await api.get<{ notifications: any[] }>("/documents/notifications");
+        setNotifications(res.notifications);
+      } catch (err) {
+        console.error("Failed to load notifications:", err);
+      }
+    }
+    loadNotifications();
+    const interval = setInterval(loadNotifications, 10000); // Poll every 10 seconds
+    return () => clearInterval(interval);
+  }, [session]);
 
   const initials = session?.name
     .split(" ")
@@ -39,7 +59,7 @@ export function TopBar() {
     if (session?.role === "admin") {
       navigate({ to: "/admin/profile" });
     } else {
-      navigate({ to: "/settings", search: { tab: "profile" } });
+      navigate({ to: "/settings" });
     }
   };
 
@@ -49,12 +69,36 @@ export function TopBar() {
         <div className="flex-1" />
         <div className="flex items-center gap-2">
           <LanguageSelector triggerClassName="h-9 w-[130px] gap-2 sm:w-[150px]" />
-          <Button variant="ghost" size="icon" className="relative">
-            <Bell className="h-4 w-4" />
-            <Badge className="absolute -right-1 -top-1 h-4 min-w-4 rounded-full px-1 text-[10px]" variant="destructive">
-              3
-            </Badge>
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="relative cursor-pointer">
+                <Bell className="h-4 w-4" />
+                {recentNotifications.length > 0 && (
+                  <Badge className="absolute -right-1 -top-1 h-4 min-w-4 rounded-full px-1 text-[10px]" variant="destructive">
+                    {recentNotifications.length}
+                  </Badge>
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64 p-0">
+              <div className="px-4 py-2.5 text-xs font-bold text-muted-foreground border-b bg-slate-50/50 dark:bg-slate-900/20">
+                Notifications
+              </div>
+              <div className="max-h-[300px] overflow-y-auto">
+                {recentNotifications.length === 0 ? (
+                  <div className="px-4 py-6 text-sm text-muted-foreground text-center">
+                    No new notifications.
+                  </div>
+                ) : (
+                  recentNotifications.map((n) => (
+                    <div key={n.id} className="px-4 py-3 text-sm border-b last:border-0 hover:bg-slate-50 dark:hover:bg-slate-900/30 transition-colors">
+                      {n.message}
+                    </div>
+                  ))
+                )}
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="gap-2 px-2">

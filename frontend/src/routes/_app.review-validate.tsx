@@ -6,8 +6,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Copy, Download, FileDown, Save, Loader2 } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { toast } from "sonner";
+import { downloadAsPDF, downloadAsDOCX } from "@/lib/download-helper";
 
 export const Route = createFileRoute("/_app/review-validate")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    doc: typeof search.doc === "string" ? search.doc : undefined,
+  }),
   head: () => ({ meta: [{ title: "Review & Validate · GovLingua AI" }] }),
   component: ReviewValidatePage,
 });
@@ -28,6 +32,7 @@ type ReviewDoc = {
 };
 
 function ReviewValidatePage() {
+  const { doc: docId } = Route.useSearch();
   const [documents, setDocuments] = useState<ReviewDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedIdx, setSelectedIdx] = useState(0);
@@ -36,11 +41,24 @@ function ReviewValidatePage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    api.get<{ documents: ReviewDoc[] }>("/documents/review")
-      .then((data) => setDocuments(data.documents))
-      .catch(() => toast.error("Failed to load documents for review"))
-      .finally(() => setLoading(false));
-  }, []);
+    async function load() {
+      try {
+        if (docId) {
+          const detail = await api.get<ReviewDoc>(`/documents/${docId}`);
+          setDocuments([detail]);
+          setSelectedIdx(0);
+        } else {
+          const data = await api.get<{ documents: ReviewDoc[] }>("/documents/review");
+          setDocuments(data.documents);
+        }
+      } catch {
+        toast.error("Failed to load documents for review");
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, [docId]);
 
   if (loading) {
     return (
@@ -102,26 +120,6 @@ function ReviewValidatePage() {
         <p className="text-muted-foreground">Review AI-generated outputs and provide your validation.</p>
       </div>
 
-      {documents.length > 1 && (
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 overflow-x-auto">
-              {documents.map((d, i) => (
-                <Button
-                  key={d.id}
-                  variant={i === selectedIdx ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => { setSelectedIdx(i); setValidation(null); setNote(""); }}
-                  className="whitespace-nowrap"
-                >
-                  {d.id} - {d.name.slice(0, 20)}
-                </Button>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Document Information</CardTitle>
@@ -142,7 +140,7 @@ function ReviewValidatePage() {
             </div>
             <div>
               <div className="text-xs text-muted-foreground font-semibold">Target Language</div>
-              <div className="mt-1.5 text-sm font-semibold">{doc.target}</div>
+              <div className="mt-1.5 text-sm font-semibold">{doc.action === "Summarize" ? "-" : doc.target}</div>
             </div>
           </div>
           {doc.qualityScore && (
@@ -154,6 +152,14 @@ function ReviewValidatePage() {
         </CardContent>
       </Card>
 
+      {!doc.processingResult?.summary && !doc.processingResult?.translation && (
+        <Card>
+          <CardContent className="p-6 text-center text-sm text-muted-foreground">
+            Your document is being processed. Results will appear here once the AI service completes.
+          </CardContent>
+        </Card>
+      )}
+
       {doc.processingResult?.summary && (
         <Card>
           <CardHeader>
@@ -163,7 +169,7 @@ function ReviewValidatePage() {
             <div className="rounded-lg border border-slate-100 bg-[#fafafa] p-4 text-sm leading-relaxed text-foreground/90 dark:border-slate-800 dark:bg-slate-900/30">
               {doc.processingResult.summary}
             </div>
-            <ResultActions label="Summary" text={doc.processingResult.summary} />
+            <ResultActions label="Summary" text={doc.processingResult.summary} fileName={doc.name} />
           </CardContent>
         </Card>
       )}
@@ -177,7 +183,7 @@ function ReviewValidatePage() {
             <div className="rounded-lg border border-slate-100 bg-[#fafafa] p-4 text-sm leading-relaxed text-foreground/90 dark:border-slate-800 dark:bg-slate-900/30">
               {doc.processingResult.translation}
             </div>
-            <ResultActions label="Translation" text={doc.processingResult.translation} />
+            <ResultActions label="Translation" text={doc.processingResult.translation} fileName={doc.name} />
           </CardContent>
         </Card>
       )}
@@ -245,7 +251,7 @@ function ReviewValidatePage() {
   );
 }
 
-function ResultActions({ label, text }: { label: string; text: string }) {
+function ResultActions({ label, text, fileName }: { label: string; text: string; fileName: string }) {
   return (
     <div className="flex flex-wrap justify-end gap-2">
       <Button
@@ -258,22 +264,30 @@ function ResultActions({ label, text }: { label: string; text: string }) {
       <Button
         variant="outline"
         className="cursor-pointer"
-        onClick={() => toast.success(`Downloading ${label} PDF…`)}
+        onClick={() => {
+          downloadAsPDF({
+            fileName,
+            summary: label === "Summary" ? text : undefined,
+            translation: label === "Translation" ? text : undefined,
+          });
+          toast.success(`${label} PDF download started`);
+        }}
       >
         <Download className="mr-2 h-4 w-4" /> Download PDF
       </Button>
       <Button
         variant="outline"
         className="cursor-pointer"
-        onClick={() => toast.success(`Downloading ${label} DOCX…`)}
+        onClick={() => {
+          downloadAsDOCX({
+            fileName,
+            summary: label === "Summary" ? text : undefined,
+            translation: label === "Translation" ? text : undefined,
+          });
+          toast.success(`${label} DOCX download started`);
+        }}
       >
         <FileDown className="mr-2 h-4 w-4" /> Download DOCX
-      </Button>
-      <Button
-        className="cursor-pointer"
-        onClick={() => toast.success(`${label} saved to history`)}
-      >
-        <Save className="mr-2 h-4 w-4" /> Save to History
       </Button>
     </div>
   );

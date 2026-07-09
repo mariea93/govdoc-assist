@@ -11,6 +11,8 @@ import { useAuth } from "@/contexts/auth-context";
 import { useLanguage } from "@/contexts/language-context";
 import { Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
+import { PasswordRequirements } from "@/components/PasswordRequirements";
+import { getPasswordChecks } from "@/lib/password-validation";
 
 type SignInSearch = {
   redirect?: string;
@@ -49,10 +51,8 @@ function SignInPage() {
   const [showSignUpConfirmPassword, setShowSignUpConfirmPassword] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
 
-  const hasMinLength = signUpPassword.length >= 8;
-  const hasUppercase = /[A-Z]/.test(signUpPassword);
-  const hasNumber = /[0-9]/.test(signUpPassword);
-  const isPasswordValid = hasMinLength && hasUppercase && hasNumber;
+  const passwordChecks = getPasswordChecks(signUpPassword);
+  const isPasswordValid = passwordChecks.isValid;
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -222,14 +222,7 @@ function SignInPage() {
               onToggle={() => setShowSignUpConfirmPassword(!showSignUpConfirmPassword)}
             />
 
-            <div className="py-1">
-              <div className="text-xs text-muted-foreground font-semibold mb-1">{t("auth.passwordRules")}</div>
-              <ul className="text-xs space-y-1 text-muted-foreground pl-4 list-disc font-medium">
-                <li className={hasMinLength ? "text-emerald-600 dark:text-emerald-400 font-semibold" : ""}>{t("auth.rule.length")}</li>
-                <li className={hasUppercase ? "text-emerald-600 dark:text-emerald-400 font-semibold" : ""}>{t("auth.rule.upper")}</li>
-                <li className={hasNumber ? "text-emerald-600 dark:text-emerald-400 font-semibold" : ""}>{t("auth.rule.number")}</li>
-              </ul>
-            </div>
+            <PasswordRequirements checks={passwordChecks} />
 
             <Button type="submit" disabled={isRegistering} className="w-full bg-[#163a5f] hover:bg-[#163a5f]/95 text-white font-semibold rounded-lg h-11 text-sm shadow-md">
               {isRegistering ? t("auth.registering") : t("auth.createAccountBtn")}
