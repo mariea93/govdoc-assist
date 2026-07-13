@@ -18,6 +18,13 @@ import { api } from "@/lib/api-client";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
+const translateLanguage = (langName: string, t: any) => {
+  if (langName === "Kinyarwanda") return t("languages.kinyarwanda.title");
+  if (langName === "English") return t("languages.english.title");
+  if (langName === "French") return t("languages.french.title");
+  return langName;
+};
+
 export const Route = createFileRoute("/_app/settings")({
   head: () => ({ meta: [{ title: "Settings · GovLingua AI" }] }),
   component: Settings,
@@ -79,7 +86,7 @@ function Settings() {
         setOrgProvince(org.province || "");
         setOrgEmail(org.contactEmail || "");
       } catch {
-        toast.error("Failed to load settings");
+        toast.error(t("settings.failedLoad"));
       } finally {
         setLoading(false);
       }
@@ -100,7 +107,7 @@ function Settings() {
       });
       toast.success(t("settings.preferencesSaved"));
     } catch {
-      toast.error("Failed to save preferences");
+      toast.error(t("settings.failedSave"));
     } finally {
       setSavingPrefs(false);
     }
@@ -108,15 +115,15 @@ function Settings() {
 
   const updateProfile = async () => {
     if (!profileName.trim()) {
-      toast.error("Name is required");
+      toast.error(t("settings.nameRequired"));
       return;
     }
     setSavingProfile(true);
     try {
       await api.patch("/auth/profile", { name: profileName.trim() });
-      toast.success("Profile updated successfully");
+      toast.success(t("settings.profileUpdated"));
     } catch (err: any) {
-      toast.error(err?.message || "Failed to update profile");
+      toast.error(err?.message || t("settings.failedProfile"));
     } finally {
       setSavingProfile(false);
     }
@@ -124,30 +131,30 @@ function Settings() {
 
   const updatePassword = async () => {
     if (!currentPassword) {
-      toast.error("Current password is required");
+      toast.error(t("settings.currentPasswordRequired"));
       return;
     }
     if (!newPassword) {
-      toast.error("New password is required");
+      toast.error(t("settings.newPasswordRequired"));
       return;
     }
     if (newPassword !== confirmPassword) {
-      toast.error("New passwords don't match");
+      toast.error(t("settings.passwordMismatch"));
       return;
     }
     if (newPassword.length < 8) {
-      toast.error("Password must be at least 8 characters");
+      toast.error(t("settings.passwordMinLength"));
       return;
     }
     setSavingPassword(true);
     try {
       await api.patch("/auth/password", { currentPassword, newPassword });
-      toast.success("Password updated successfully");
+      toast.success(t("settings.passwordUpdated"));
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
     } catch (err: any) {
-      toast.error(err?.message || "Failed to update password");
+      toast.error(err?.message || t("settings.failedPassword"));
     } finally {
       setSavingPassword(false);
     }
@@ -160,9 +167,9 @@ function Settings() {
         province: orgProvince,
         contactEmail: orgEmail,
       });
-      toast.success("Organization saved successfully");
+      toast.success(t("settings.organizationSaved"));
     } catch {
-      toast.error("Failed to save organization");
+      toast.error(t("settings.failedOrg"));
     } finally {
       setSavingOrg(false);
     }
@@ -217,32 +224,32 @@ function Settings() {
                   <SelectContent>
                     <SelectItem value="short">{t("settings.length.short")}</SelectItem>
                     <SelectItem value="medium">{t("settings.length.medium")}</SelectItem>
-                    <SelectItem value="long">Long</SelectItem>
+                    <SelectItem value="long">{t("settings.length.long")}</SelectItem>
                     <SelectItem value="detailed">{t("settings.length.detailed")}</SelectItem>
                   </SelectContent>
                 </Select>
               </Row>
-              <Row label="Default source language">
+              <Row label={t("settings.defaultSourceLanguage")}>
                 <Select value={sourceLanguage} onValueChange={setSourceLanguage}>
                   <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
-                  <SelectContent>{LANGUAGES.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
+                  <SelectContent>{LANGUAGES.map((l) => <SelectItem key={l} value={l}>{translateLanguage(l, t)}</SelectItem>)}</SelectContent>
                 </Select>
               </Row>
               <Row label={t("settings.defaultTargetLanguage")}>
                 <Select value={target} onValueChange={setTarget}>
                   <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
-                  <SelectContent>{LANGUAGES.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
+                  <SelectContent>{LANGUAGES.map((l) => <SelectItem key={l} value={l}>{translateLanguage(l, t)}</SelectItem>)}</SelectContent>
                 </Select>
               </Row>
               <Row label={t("settings.emailNotifications")} hint={t("settings.emailNotificationsHint")}>
                 <Switch checked={emailNotifications} onCheckedChange={setEmailNotifications} />
               </Row>
-              <Row label="Processing alerts" hint="Get notified when document processing completes.">
+              <Row label={t("settings.processingAlerts")} hint={t("settings.processingAlertsHint")}>
                 <Switch checked={processingAlerts} onCheckedChange={setProcessingAlerts} />
               </Row>
               <div className="flex justify-end">
                 <Button onClick={savePreferences} disabled={savingPrefs}>
-                  {savingPrefs ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...</> : t("settings.saveChanges")}
+                  {savingPrefs ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{t("settings.saving")}</> : t("settings.saveChanges")}
                 </Button>
               </div>
             </CardContent>
@@ -254,16 +261,16 @@ function Settings() {
             <CardHeader><CardTitle>{t("settings.tab.profile")}</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Full Name" value={profileName} onChange={(e) => setProfileName(e.target.value)} />
-                <Field label="Email" type="email" value={profileEmail} readOnly disabled />
-                <Field label="Role" defaultValue={session ? getRoleLabel(session.role) : ""} readOnly disabled />
+                <Field label={t("settings.fullName")} value={profileName} onChange={(e) => setProfileName(e.target.value)} />
+                <Field label={t("settings.email")} type="email" value={profileEmail} readOnly disabled />
+                <Field label={t("settings.role")} defaultValue={session ? getRoleLabel(session.role) : ""} readOnly disabled />
               </div>
               <p className="text-xs text-muted-foreground">
-                Email and role are managed by your administrator.
+                {t("settings.profileEmailRoleHint")}
               </p>
               <div className="flex justify-end">
                 <Button onClick={updateProfile} disabled={savingProfile}>
-                  {savingProfile ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...</> : "Update profile"}
+                  {savingProfile ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{t("settings.saving")}</> : t("settings.updateProfile")}
                 </Button>
               </div>
             </CardContent>
@@ -272,14 +279,14 @@ function Settings() {
 
         <TabsContent value="security" className="mt-4">
           <Card>
-            <CardHeader><CardTitle>Security</CardTitle></CardHeader>
+            <CardHeader><CardTitle>{t("settings.tab.security")}</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <Field label="Current password" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Enter current password" />
-              <Field label="New password" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Enter new password (min 8 characters)" />
-              <Field label="Confirm new password" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Repeat new password" />
+              <Field label={t("settings.currentPassword")} type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder={t("settings.currentPasswordPlaceholder")} />
+              <Field label={t("settings.newPassword")} type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder={t("settings.newPasswordPlaceholder")} />
+              <Field label={t("settings.confirmPassword")} type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder={t("settings.confirmPasswordPlaceholder")} />
               <div className="flex justify-end">
                 <Button onClick={updatePassword} disabled={savingPassword}>
-                  {savingPassword ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Updating...</> : "Update password"}
+                  {savingPassword ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{t("settings.updating")}</> : t("settings.updatePassword")}
                 </Button>
               </div>
             </CardContent>
@@ -288,19 +295,19 @@ function Settings() {
 
         <TabsContent value="organization" className="mt-4">
           <Card>
-            <CardHeader><CardTitle>Organization</CardTitle></CardHeader>
+            <CardHeader><CardTitle>{t("settings.tab.organization")}</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Organization Name" value={orgName} readOnly disabled placeholder="e.g. MINALOC" />
-                <Field label="Province" value={orgProvince} onChange={(e) => setOrgProvince(e.target.value)} placeholder="e.g. Kigali City" />
-                <Field label="Contact Email" type="email" value={orgEmail} onChange={(e) => setOrgEmail(e.target.value)} placeholder="e.g. info@org.gov.rw" />
+                <Field label={t("settings.orgName")} value={orgName} readOnly disabled placeholder={t("settings.orgNamePlaceholder")} />
+                <Field label={t("settings.province")} value={orgProvince} onChange={(e) => setOrgProvince(e.target.value)} placeholder={t("settings.orgProvincePlaceholder")} />
+                <Field label={t("settings.contactEmail")} type="email" value={orgEmail} onChange={(e) => setOrgEmail(e.target.value)} placeholder={t("settings.orgEmailPlaceholder")} />
               </div>
               <p className="text-xs text-muted-foreground">
-                Organization name is assigned by your administrator.
+                {t("settings.orgNameHint")}
               </p>
               <div className="flex justify-end">
                 <Button onClick={saveOrganization} disabled={savingOrg}>
-                  {savingOrg ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...</> : "Save organization"}
+                  {savingOrg ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{t("settings.saving")}</> : t("settings.saveOrganization")}
                 </Button>
               </div>
             </CardContent>

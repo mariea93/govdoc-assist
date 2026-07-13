@@ -10,8 +10,16 @@ import { Copy, Download, Save, FileDown, CheckCircle2, XCircle, MessageSquarePlu
 import { api } from "@/lib/api-client";
 import { toast } from "sonner";
 import { downloadAsPDF, downloadAsDOCX } from "@/lib/download-helper";
+import { useLanguage } from "@/contexts/language-context";
 
 type ValidationAction = "approve" | "reject" | "improvement" | null;
+
+const translateLanguage = (langName: string, t: any) => {
+  if (langName === "Kinyarwanda") return t("languages.kinyarwanda.title");
+  if (langName === "English") return t("languages.english.title");
+  if (langName === "French") return t("languages.french.title");
+  return langName;
+};
 
 export const Route = createFileRoute("/_app/results")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -35,6 +43,7 @@ type DocResult = {
 };
 
 function Results() {
+  const { t } = useLanguage();
   const { doc: docId } = Route.useSearch();
   const { session } = useAuth();
   const [validation, setValidation] = useState<ValidationAction>(null);
@@ -98,11 +107,11 @@ function Results() {
     return (
       <div className="mx-auto max-w-6xl space-y-6 animate-fade-in">
         <div>
-          <h1 className="font-display text-3xl font-bold tracking-tight">Processing Results</h1>
-          <p className="text-muted-foreground">No completed documents yet. Upload a document to get started.</p>
+          <h1 className="font-display text-3xl font-bold tracking-tight">{t("results.title")}</h1>
+          <p className="text-muted-foreground">{t("results.noDocs")}</p>
         </div>
         <Button asChild>
-          <Link to="/upload">Upload Document</Link>
+          <Link to="/upload">{t("sidebar.upload")}</Link>
         </Button>
       </div>
     );
@@ -115,21 +124,21 @@ function Results() {
       await api.post(`/documents/${docItem.dbId}/validation`, {
         action,
       });
-      if (action === "approve") toast.success("Output approved");
-      else if (action === "reject") toast.error("Output rejected");
-      else if (action === "improvement") toast.info("Improvement requested");
+      if (action === "approve") toast.success(t("results.approved"));
+      else if (action === "reject") toast.error(t("results.rejected"));
+      else if (action === "improvement") toast.info(t("results.improvementRequested"));
 
       // Refresh document details to update history and status
       const detail = await api.get<DocResult>(`/documents/${docItem.dbId}`);
       setDoc(detail);
     } catch (err: any) {
-      toast.error(err?.message || "Failed to save validation");
+      toast.error(err?.message || t("results.failedValidation"));
     }
   };
 
   const handleSaveComment = async () => {
     if (!feedback.trim()) {
-      toast.error("Please enter a comment before saving");
+      toast.error(t("results.commentRequired"));
       return;
     }
     setSubmitting(true);
@@ -137,13 +146,13 @@ function Results() {
       await api.post(`/documents/${docItem.dbId}/validation`, {
         feedback: feedback.trim(),
       });
-      toast.success("Comment saved successfully!");
+      toast.success(t("results.commentSaved"));
 
       // Refresh document details to update local validation details
       const detail = await api.get<DocResult>(`/documents/${docItem.dbId}`);
       setDoc(detail);
     } catch (err: any) {
-      toast.error(err?.message || "Failed to save comment");
+      toast.error(err?.message || t("results.failedComment"));
     } finally {
       setSubmitting(false);
     }
@@ -153,34 +162,34 @@ function Results() {
     <div className="mx-auto max-w-6xl space-y-6 animate-fade-in">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="font-display text-3xl font-bold tracking-tight">Processing Results</h1>
-          <p className="text-muted-foreground">Review your generated summary and translation.</p>
+          <h1 className="font-display text-3xl font-bold tracking-tight">{t("results.title")}</h1>
+          <p className="text-muted-foreground">{t("results.subtitle")}</p>
         </div>
         <Button asChild variant="outline" className="cursor-pointer">
-          <Link to="/upload">Process Another</Link>
+          <Link to="/upload">{t("results.processAnother")}</Link>
         </Button>
       </div>
 
       <Card>
         <CardContent className="grid gap-4 p-5 sm:grid-cols-3">
-          <Info label="Document" value={docItem.name} />
-          <Info label="Original language" value={docItem.source} />
-          <Info label="Translated to" value={docItem.action === "Summarize" ? "-" : docItem.target} />
+          <Info label={t("results.document")} value={docItem.name} />
+          <Info label={t("results.originalLanguage")} value={translateLanguage(docItem.source, t)} />
+          <Info label={t("results.translatedTo")} value={docItem.action === "Summarize" ? "-" : translateLanguage(docItem.target, t)} />
         </CardContent>
       </Card>
 
       <div className="grid gap-6 lg:grid-cols-2">
         {docItem.processingResult?.summary && (
           <ResultPanel
-            title="AI Summary"
-            badge={`${docItem.source}`}
+            title={t("results.summary")}
+            badge={translateLanguage(docItem.source, t)}
             body={docItem.processingResult.summary}
           />
         )}
         {docItem.processingResult?.translation && (
           <ResultPanel
-            title="Translation"
-            badge={docItem.target}
+            title={t("results.translation")}
+            badge={translateLanguage(docItem.target, t)}
             body={docItem.processingResult.translation}
           />
         )}
@@ -188,8 +197,8 @@ function Results() {
           <Card className="lg:col-span-2">
             <CardContent className="p-6 text-center text-sm text-muted-foreground">
               {docItem.status === "Processing" || docItem.status === "Pending"
-                ? "Your document is being processed. Results will appear here once the AI service completes."
-                : "No results available yet for this document."}
+                ? t("results.processingPlaceholder")
+                : t("results.noResults")}
             </CardContent>
           </Card>
         )}
@@ -197,7 +206,7 @@ function Results() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base font-bold">Human Validation</CardTitle>
+          <CardTitle className="text-base font-bold">{t("results.humanValidation")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap gap-2">
@@ -206,21 +215,21 @@ function Results() {
               className={`cursor-pointer ${validation === "approve" ? "border-success bg-success text-success-foreground hover:bg-success/90" : ""}`}
               onClick={() => handleValidation("approve")}
             >
-              <CheckCircle2 className="mr-2 h-4 w-4" /> Approve output
+              <CheckCircle2 className="mr-2 h-4 w-4" /> {t("results.approve")}
             </Button>
             <Button
               variant={validation === "reject" ? "destructive" : "outline"}
               className="cursor-pointer"
               onClick={() => handleValidation("reject")}
             >
-              <XCircle className="mr-2 h-4 w-4" /> Reject output
+              <XCircle className="mr-2 h-4 w-4" /> {t("results.reject")}
             </Button>
             <Button
               variant={validation === "improvement" ? "secondary" : "outline"}
               className="cursor-pointer"
               onClick={() => handleValidation("improvement")}
             >
-              <MessageSquarePlus className="mr-2 h-4 w-4" /> Request improvement
+              <MessageSquarePlus className="mr-2 h-4 w-4" /> {t("results.improvement")}
             </Button>
           </div>
 
@@ -228,7 +237,7 @@ function Results() {
             <Textarea
               value={feedback}
               onChange={(e) => setFeedback(e.target.value)}
-              placeholder="Share your comments or suggestions..."
+              placeholder={t("results.feedbackPlaceholder")}
               className="min-h-[100px] resize-none"
             />
           </div>
@@ -236,8 +245,8 @@ function Results() {
       </Card>
 
       <div className="flex flex-wrap justify-end gap-2">
-        <Button variant="outline" className="cursor-pointer" onClick={() => { navigator.clipboard.writeText(docItem.processingResult?.summary || docItem.processingResult?.translation || ""); toast.success("Copied to clipboard"); }}>
-          <Copy className="mr-2 h-4 w-4" /> Copy
+        <Button variant="outline" className="cursor-pointer" onClick={() => { navigator.clipboard.writeText(docItem.processingResult?.summary || docItem.processingResult?.translation || ""); toast.success(t("results.copied")); }}>
+          <Copy className="mr-2 h-4 w-4" /> {t("results.copy")}
         </Button>
         <Button
           variant="outline"
@@ -248,10 +257,10 @@ function Results() {
               summary: docItem.processingResult?.summary || undefined,
               translation: docItem.processingResult?.translation || undefined,
             });
-            toast.success("PDF download started");
+            toast.success(t("results.pdfStarted"));
           }}
         >
-          <Download className="mr-2 h-4 w-4" /> Download PDF
+          <Download className="mr-2 h-4 w-4" /> {t("results.downloadPdf")}
         </Button>
         <Button
           variant="outline"
@@ -262,13 +271,13 @@ function Results() {
               summary: docItem.processingResult?.summary || undefined,
               translation: docItem.processingResult?.translation || undefined,
             });
-            toast.success("DOCX download started");
+            toast.success(t("results.docxStarted"));
           }}
         >
-          <FileDown className="mr-2 h-4 w-4" /> Download DOCX
+          <FileDown className="mr-2 h-4 w-4" /> {t("results.downloadDocx")}
         </Button>
         <Button className="cursor-pointer" disabled={submitting} onClick={handleSaveComment}>
-          <Save className="mr-2 h-4 w-4" /> Save Comment
+          <Save className="mr-2 h-4 w-4" /> {t("results.saveComment")}
         </Button>
       </div>
     </div>

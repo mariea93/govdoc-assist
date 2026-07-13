@@ -14,6 +14,14 @@ import { LANGUAGES } from "@/lib/mock-data";
 import { StatusBadge } from "@/components/StatusBadge";
 import { api } from "@/lib/api-client";
 import { useAuth } from "@/contexts/auth-context";
+import { useLanguage } from "@/contexts/language-context";
+
+const translateLanguage = (langName: string, t: any) => {
+  if (langName === "Kinyarwanda") return t("languages.kinyarwanda.title");
+  if (langName === "English") return t("languages.english.title");
+  if (langName === "French") return t("languages.french.title");
+  return langName;
+};
 
 export const Route = createFileRoute("/_app/history")({
   head: () => ({ meta: [{ title: "History · GovLingua AI" }] }),
@@ -39,6 +47,7 @@ function displayTarget(action: string, target: string) {
 }
 
 export function History() {
+  const { t } = useLanguage();
   const { role } = useAuth();
   const [q, setQ] = useState("");
   const [lang, setLang] = useState("all");
@@ -67,11 +76,26 @@ export function History() {
     return true;
   });
 
+  const getActionLabel = (act: string) => {
+    if (act === "Summarize") return t("history.summarize");
+    if (act === "Translate") return t("history.translate");
+    if (act === "Summarize + Translate") return t("history.summarizeTranslate");
+    return act;
+  };
+
+  const getValidationStatusLabel = (valStatus: string) => {
+    if (valStatus === "Approved") return t("status.approved");
+    if (valStatus === "Rejected") return t("status.rejected");
+    if (valStatus === "Improvement Requested") return t("status.improvement");
+    if (valStatus === "Pending") return t("status.pending");
+    return valStatus;
+  };
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="font-display text-3xl font-bold tracking-tight">Document History</h1>
-        <p className="text-muted-foreground">Search and review all previously processed documents.</p>
+        <h1 className="font-display text-3xl font-bold tracking-tight">{t("history.title")}</h1>
+        <p className="text-muted-foreground">{t("history.subtitle")}</p>
       </div>
 
       <Card>
@@ -79,22 +103,22 @@ export function History() {
           <div className="grid gap-3 md:grid-cols-4">
             <div className="relative md:col-span-2">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input placeholder="Search by document name…" value={q} onChange={(e) => setQ(e.target.value)} className="pl-9" />
+              <Input placeholder={t("history.searchPlaceholder")} value={q} onChange={(e) => setQ(e.target.value)} className="pl-9" />
             </div>
             <Select value={lang} onValueChange={setLang}>
-              <SelectTrigger><SelectValue placeholder="Language" /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder={t("history.language")} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All languages</SelectItem>
-                {LANGUAGES.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                <SelectItem value="all">{t("history.allLanguages")}</SelectItem>
+                {LANGUAGES.map((l) => <SelectItem key={l} value={l}>{translateLanguage(l, t)}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={action} onValueChange={setAction}>
-              <SelectTrigger><SelectValue placeholder="Action" /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder={t("history.action")} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All actions</SelectItem>
-                <SelectItem value="Summarize">Summarize</SelectItem>
-                <SelectItem value="Translate">Translate</SelectItem>
-                <SelectItem value="Summarize + Translate">Summarize + Translate</SelectItem>
+                <SelectItem value="all">{t("history.allActions")}</SelectItem>
+                <SelectItem value="Summarize">{t("history.summarize")}</SelectItem>
+                <SelectItem value="Translate">{t("history.translate")}</SelectItem>
+                <SelectItem value="Summarize + Translate">{t("history.summarizeTranslate")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -104,20 +128,20 @@ export function History() {
       <Card>
         <CardContent className="p-0">
           {loading ? (
-            <div className="p-8 text-center text-muted-foreground">Loading documents...</div>
+            <div className="p-8 text-center text-muted-foreground">{t("history.loadingDocs")}</div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Document</TableHead>
-                    <TableHead>Original</TableHead>
-                    <TableHead>Target</TableHead>
-                    <TableHead>Action</TableHead>
-                    <TableHead>Validation</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Time</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>{t("history.colDocument")}</TableHead>
+                    <TableHead>{t("history.colOriginal")}</TableHead>
+                    <TableHead>{t("history.colTarget")}</TableHead>
+                    <TableHead>{t("history.colAction")}</TableHead>
+                    <TableHead>{t("history.colValidation")}</TableHead>
+                    <TableHead>{t("history.colDate")}</TableHead>
+                    <TableHead>{t("history.colTime")}</TableHead>
+                    <TableHead>{t("history.colStatus")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -136,15 +160,15 @@ export function History() {
                           </div>
                         </Link>
                       </TableCell>
-                      <TableCell><Badge variant="outline">{d.source}</Badge></TableCell>
+                      <TableCell><Badge variant="outline">{translateLanguage(d.source, t)}</Badge></TableCell>
                       <TableCell>
                         {displayTarget(d.action, d.target) === "-" ? (
                           <span className="text-muted-foreground">-</span>
                         ) : (
-                          <Badge variant="outline">{d.target}</Badge>
+                          <Badge variant="outline">{translateLanguage(d.target, t)}</Badge>
                         )}
                       </TableCell>
-                      <TableCell>{d.action}</TableCell>
+                      <TableCell>{getActionLabel(d.action)}</TableCell>
                       <TableCell>
                         {d.validationStatus === "-" ? (
                           <span className="text-muted-foreground">-</span>
@@ -161,7 +185,7 @@ export function History() {
                                     : "bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-900/30 dark:text-slate-400 dark:border-slate-800"
                             }
                           >
-                            {d.validationStatus}
+                            {getValidationStatusLabel(d.validationStatus)}
                           </Badge>
                         )}
                       </TableCell>
@@ -172,7 +196,7 @@ export function History() {
                   ))}
                   {filtered.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={8} className="py-12 text-center text-muted-foreground">No documents match your filters.</TableCell>
+                      <TableCell colSpan={8} className="py-12 text-center text-muted-foreground">{t("history.noResults")}</TableCell>
                     </TableRow>
                   )}
                 </TableBody>

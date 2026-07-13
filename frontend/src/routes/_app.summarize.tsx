@@ -16,15 +16,24 @@ import { useAuth } from "@/contexts/auth-context";
 import { getPostProcessRoute } from "@/lib/post-process-nav";
 import { ProcessingOverlay } from "@/components/ProcessingOverlay";
 import { waitForDocument } from "@/lib/wait-for-document";
+import { useLanguage } from "@/contexts/language-context";
 
 export const Route = createFileRoute("/_app/summarize")({
   head: () => ({ meta: [{ title: "Summarize Text · GovLingua AI" }] }),
   component: SummarizePage,
 });
 
+const translateLanguage = (langName: string, t: any) => {
+  if (langName === "Kinyarwanda") return t("languages.kinyarwanda.title");
+  if (langName === "English") return t("languages.english.title");
+  if (langName === "French") return t("languages.french.title");
+  return langName;
+};
+
 const SAMPLE = "The district administration today released its quarterly report detailing progress on infrastructure, education, and healthcare initiatives across all sectors. Key highlights include the completion of three new health posts, the rehabilitation of 42 kilometres of feeder roads, and the enrolment of an additional 1,200 children in early childhood development programmes…";
 
 function SummarizePage() {
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const { role } = useAuth();
   const [text, setText] = useState("");
@@ -37,7 +46,7 @@ function SummarizePage() {
 
   const handle = async () => {
     if (text.trim().length < 30) {
-      toast.error("Please paste more text to summarize");
+      toast.error(t("summarize.moreText"));
       return;
     }
     setLoading(true);
@@ -50,18 +59,18 @@ function SummarizePage() {
         summaryLength: length,
       });
 
-      setOverlayMessage("Generating summary...");
+      setOverlayMessage(t("upload.generatingSummary"));
       setOverlayOpen(true);
 
       try {
         await waitForDocument(result.dbId);
-        toast.success("Summary generated successfully");
+        toast.success(t("summarize.success"));
         navigate(getPostProcessRoute(role, result.dbId));
       } catch (pollErr: any) {
-        toast.error(pollErr?.message || "Processing failed");
+        toast.error(pollErr?.message || t("summarize.processingFailed"));
       }
     } catch (err: any) {
-      toast.error(err?.message || "Summarization request failed");
+      toast.error(err?.message || t("summarize.failed"));
     } finally {
       setLoading(false);
       setOverlayOpen(false);
@@ -71,29 +80,29 @@ function SummarizePage() {
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <div>
-        <h1 className="font-display text-3xl font-bold tracking-tight">Summarize Text</h1>
-        <p className="text-muted-foreground">Enter or paste long text and generate a concise AI summary.</p>
+        <h1 className="font-display text-3xl font-bold tracking-tight">{t("summarize.title")}</h1>
+        <p className="text-muted-foreground">{t("summarize.subtitle")}</p>
       </div>
 
       <Card className="w-full">
-        <CardHeader><CardTitle>Input</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{t("summarize.input")}</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <Label>Source language</Label>
+              <Label>{t("summarize.sourceLanguage")}</Label>
               <Select value={source} onValueChange={setSource}>
                 <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {LANGUAGES.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                  {LANGUAGES.map((l) => <SelectItem key={l} value={l}>{translateLanguage(l, t)}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <Label>Summary length</Label>
+              <Label>{t("summarize.summaryLength")}</Label>
               <RadioGroup value={length} onValueChange={setLength} className="mt-2 grid grid-cols-3 gap-1.5">
                 {["short", "medium", "detailed"].map((l) => (
                   <label key={l} className="flex cursor-pointer items-center justify-center gap-1.5 rounded-md border p-2 text-xs capitalize hover:bg-muted/50">
-                    <RadioGroupItem value={l} /> {l}
+                    <RadioGroupItem value={l} /> {t(`settings.length.${l}` as any)}
                   </label>
                 ))}
               </RadioGroup>
@@ -102,16 +111,16 @@ function SummarizePage() {
           <Textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Enter or paste your text here"
+            placeholder={t("summarize.placeholder")}
             className="min-h-[320px] resize-none"
           />
           <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>{text.length} characters</span>
-            <Button variant="ghost" size="sm" onClick={() => setText(SAMPLE)}>Try sample</Button>
+            <span>{t("summarize.characters", { count: text.length })}</span>
+            <Button variant="ghost" size="sm" onClick={() => setText(SAMPLE)}>{t("summarize.trySample")}</Button>
           </div>
           <div className="mt-5 flex justify-end">
             <Button onClick={handle} disabled={loading} size="lg">
-              {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating…</> : "Generate Summary"}
+              {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {t("summarize.generating")}</> : t("summarize.generate")}
             </Button>
           </div>
         </CardContent>

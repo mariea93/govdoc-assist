@@ -14,13 +14,22 @@ import { useAuth } from "@/contexts/auth-context";
 import { getPostProcessRoute } from "@/lib/post-process-nav";
 import { ProcessingOverlay } from "@/components/ProcessingOverlay";
 import { waitForDocument } from "@/lib/wait-for-document";
+import { useLanguage } from "@/contexts/language-context";
 
 export const Route = createFileRoute("/_app/translate")({
   head: () => ({ meta: [{ title: "Translate Text · GovLingua AI" }] }),
   component: TranslatePage,
 });
 
+const translateLanguage = (langName: string, t: any) => {
+  if (langName === "Kinyarwanda") return t("languages.kinyarwanda.title");
+  if (langName === "English") return t("languages.english.title");
+  if (langName === "French") return t("languages.french.title");
+  return langName;
+};
+
 function TranslatePage() {
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const { role } = useAuth();
   const [source, setSource] = useState("English");
@@ -39,7 +48,7 @@ function TranslatePage() {
   };
 
   const translate = async () => {
-    if (!input.trim()) return toast.error("Enter text to translate");
+    if (!input.trim()) return toast.error(t("translate.enterText"));
     setLoading(true);
     try {
       const result = await api.post<{ dbId: string }>("/documents/translate", {
@@ -49,18 +58,18 @@ function TranslatePage() {
         action: "translate",
       });
 
-      setOverlayMessage("Translating...");
+      setOverlayMessage(t("translate.translating"));
       setOverlayOpen(true);
 
       try {
         await waitForDocument(result.dbId);
-        toast.success("Text translated successfully");
+        toast.success(t("translate.success"));
         navigate(getPostProcessRoute(role, result.dbId));
       } catch (pollErr: any) {
-        toast.error(pollErr?.message || "Processing failed");
+        toast.error(pollErr?.message || t("translate.processingFailed"));
       }
     } catch (err: any) {
-      toast.error(err?.message || "Translation request failed");
+      toast.error(err?.message || t("translate.failed"));
     } finally {
       setLoading(false);
       setOverlayOpen(false);
@@ -70,8 +79,8 @@ function TranslatePage() {
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <div>
-        <h1 className="font-display text-3xl font-bold tracking-tight">Translate Text</h1>
-        <p className="text-muted-foreground">Translate between Kinyarwanda, English and French.</p>
+        <h1 className="font-display text-3xl font-bold tracking-tight">{t("translate.title")}</h1>
+        <p className="text-muted-foreground">{t("translate.subtitle")}</p>
       </div>
 
       <Card>
@@ -79,24 +88,24 @@ function TranslatePage() {
           <div className="flex flex-col items-center gap-3 md:flex-row">
             <Select value={source} onValueChange={setSource}>
               <SelectTrigger className="md:w-56"><SelectValue /></SelectTrigger>
-              <SelectContent>{LANGUAGES.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
+              <SelectContent>{LANGUAGES.map((l) => <SelectItem key={l} value={l}>{translateLanguage(l, t)}</SelectItem>)}</SelectContent>
             </Select>
-            <Button variant="outline" size="icon" onClick={swap} aria-label="Swap languages">
+            <Button variant="outline" size="icon" onClick={swap} aria-label={t("translate.swapLanguages")}>
               <ArrowLeftRight className="h-4 w-4" />
             </Button>
             <Select value={target} onValueChange={setTarget}>
               <SelectTrigger className="md:w-56"><SelectValue /></SelectTrigger>
-              <SelectContent>{LANGUAGES.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
+              <SelectContent>{LANGUAGES.map((l) => <SelectItem key={l} value={l}>{translateLanguage(l, t)}</SelectItem>)}</SelectContent>
             </Select>
           </div>
 
           <div className="mt-5">
             <div className="rounded-lg border w-full">
-              <div className="border-b px-3 py-2 text-xs font-semibold text-muted-foreground">{source}</div>
+              <div className="border-b px-3 py-2 text-xs font-semibold text-muted-foreground">{translateLanguage(source, t)}</div>
               <Textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Type or paste text…"
+                placeholder={t("translate.placeholder")}
                 className="min-h-[300px] resize-none border-0 focus-visible:ring-0 w-full"
               />
             </div>
@@ -104,7 +113,7 @@ function TranslatePage() {
 
           <div className="mt-5 flex justify-end">
             <Button onClick={translate} disabled={loading} size="lg">
-              {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Translating…</> : "Translate"}
+              {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {t("translate.translating")}</> : t("translate.translate")}
             </Button>
           </div>
         </CardContent>

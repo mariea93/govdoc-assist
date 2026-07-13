@@ -30,6 +30,7 @@ import {
 import { api } from "@/lib/api-client";
 import { Plus, Search, UserCog, UserMinus, UserPlus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { useLanguage } from "@/contexts/language-context";
 
 export const Route = createFileRoute("/admin/users")({
   head: () => ({ meta: [{ title: "User Management · GovLingua AI" }] }),
@@ -39,11 +40,20 @@ export const Route = createFileRoute("/admin/users")({
 type RoleFilter = "all" | UserRole;
 
 function AdminUsers() {
+  const { t } = useLanguage();
   const [users, setUsers] = useState<AdminUserRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
   const [addUserOpen, setAddUserOpen] = useState(false);
+
+  const getRoleTranslation = (r: string) => {
+    const normalized = r.toLowerCase();
+    if (normalized === "admin") return t("role.admin");
+    if (normalized === "employee") return t("role.employee");
+    if (normalized === "user" || normalized === "citizen") return t("role.citizen");
+    return r;
+  };
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -51,11 +61,11 @@ function AdminUsers() {
       const data = await api.get<{ users: ApiAdminUser[] }>("/admin/users?limit=100");
       setUsers(data.users.map(mapApiUser));
     } catch {
-      toast.error("Failed to load users");
+      toast.error(t("admin.users.failedLoad"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     loadUsers();
@@ -83,28 +93,28 @@ function AdminUsers() {
   const updateStatus = async (id: string, status: UserAccount["status"]) => {
     try {
       await api.patch(`/admin/users/${id}/status`, { status: toApiStatus(status) });
-      toast.success(`Account ${status === "Active" ? "enabled" : status === "Disabled" ? "disabled" : "updated"}`);
+      toast.success(status === "Active" ? t("admin.users.enabledToast") : status === "Disabled" ? t("admin.users.disabledToast") : t("admin.users.updatedToast"));
       await loadUsers();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to update account status");
+      toast.error(err instanceof Error ? err.message : t("admin.users.failedStatus"));
     }
   };
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col gap-1">
-        <h1 className="font-display text-3xl font-bold tracking-tight">User Management</h1>
+        <h1 className="font-display text-3xl font-bold tracking-tight">{t("admin.users.title")}</h1>
         <p className="text-muted-foreground">
-          Manage administrative, employee, and citizen accounts.
+          {t("admin.users.subtitle")}
         </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          { label: "Active Users", value: stats.active, sub: "Currently active" },
-          { label: "Pending Invitations", value: stats.invited, sub: "Awaiting acceptance" },
-          { label: "Disabled Accounts", value: stats.disabled, sub: "Access revoked" },
-          { label: "Total Accounts", value: stats.total, sub: "All registered users" },
+          { label: t("admin.users.activeUsers"), value: stats.active, sub: t("admin.users.stats.activeSub") },
+          { label: t("admin.users.pendingInvites"), value: stats.invited, sub: t("admin.users.stats.invitedSub") },
+          { label: t("admin.users.disabledAccounts"), value: stats.disabled, sub: t("admin.users.stats.disabledSub") },
+          { label: t("admin.users.totalUsers"), value: stats.total, sub: t("admin.users.stats.totalSub") },
         ].map((s) => (
           <Card key={s.label}>
             <CardContent className="p-5">
@@ -119,19 +129,19 @@ function AdminUsers() {
       <Card>
         <CardHeader className="space-y-4">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle className="text-base font-bold">User Accounts</CardTitle>
+            <CardTitle className="text-base font-bold">{t("admin.users.userAccounts")}</CardTitle>
             <Button
               onClick={() => setAddUserOpen(true)}
-              className="bg-[#163a5f] hover:bg-[#163a5f]/95 text-white font-semibold shadow-md"
+              className="bg-[#163a5f] hover:bg-[#163a5f]/95 text-white font-semibold shadow-md animate-fade-in cursor-pointer"
             >
-              <Plus className="mr-2 h-4 w-4" /> Add User
+              <Plus className="mr-2 h-4 w-4" /> {t("admin.users.addUser")}
             </Button>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
             <div className="relative flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Search users by name or email…"
+                placeholder={t("admin.users.searchPlaceholder")}
                 className="pl-9"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -139,13 +149,13 @@ function AdminUsers() {
             </div>
             <Select value={roleFilter} onValueChange={(v) => setRoleFilter(v as RoleFilter)}>
               <SelectTrigger className="w-full sm:w-[180px]">
-                <SelectValue placeholder="Filter by role" />
+                <SelectValue placeholder={t("admin.users.colRole")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
-                <SelectItem value="employee">Employee</SelectItem>
-                <SelectItem value="user">Citizen</SelectItem>
+                <SelectItem value="all">{t("admin.users.allRoles")}</SelectItem>
+                <SelectItem value="admin">{t("role.admin")}</SelectItem>
+                <SelectItem value="employee">{t("role.employee")}</SelectItem>
+                <SelectItem value="user">{t("role.citizen")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -160,18 +170,18 @@ function AdminUsers() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="min-w-[160px]">Name</TableHead>
-                    <TableHead className="min-w-[220px]">Email</TableHead>
-                    <TableHead className="w-[120px]">Role</TableHead>
-                    <TableHead className="w-[120px]">Status</TableHead>
-                    <TableHead className="text-right min-w-[220px]">Actions</TableHead>
+                    <TableHead className="min-w-[160px]">{t("admin.users.colName")}</TableHead>
+                    <TableHead className="min-w-[220px]">{t("admin.users.colEmail")}</TableHead>
+                    <TableHead className="w-[120px]">{t("admin.users.colRole")}</TableHead>
+                    <TableHead className="w-[120px]">{t("admin.users.colStatus")}</TableHead>
+                    <TableHead className="text-right min-w-[220px]">{t("admin.users.colActions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredUsers.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={5} className="py-10 text-center text-muted-foreground">
-                        No users match your search or filter.
+                        {t("admin.users.noUsers")}
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -181,7 +191,7 @@ function AdminUsers() {
                           {user.name}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">{user.email}</TableCell>
-                        <TableCell className="text-sm font-medium">{getRoleLabel(user.role)}</TableCell>
+                        <TableCell className="text-sm font-medium">{getRoleTranslation(user.role)}</TableCell>
                         <TableCell>
                           <AccountStatusBadge status={user.status} />
                         </TableCell>
@@ -191,9 +201,9 @@ function AdminUsers() {
                               variant="ghost"
                               size="sm"
                               className="h-8 text-xs"
-                              onClick={() => toast.message(`Edit ${user.name}`, { description: "User edit dialog would open here." })}
+                              onClick={() => toast.message(`${t("admin.users.edit")} ${user.name}`, { description: t("admin.users.editMock") })}
                             >
-                              <UserCog className="mr-1 h-3.5 w-3.5" /> Edit
+                              <UserCog className="mr-1 h-3.5 w-3.5" /> {t("admin.users.edit")}
                             </Button>
                             {user.status !== "Active" && (
                               <Button
@@ -202,7 +212,7 @@ function AdminUsers() {
                                 className="h-8 text-xs text-[var(--brand-green)]"
                                 onClick={() => updateStatus(user.id, "Active")}
                               >
-                                <UserPlus className="mr-1 h-3.5 w-3.5" /> Enable
+                                <UserPlus className="mr-1 h-3.5 w-3.5" /> {t("admin.users.enable")}
                               </Button>
                             )}
                             {user.status !== "Disabled" && (
@@ -212,7 +222,7 @@ function AdminUsers() {
                                 className="h-8 text-xs text-destructive"
                                 onClick={() => updateStatus(user.id, "Disabled")}
                               >
-                                <UserMinus className="mr-1 h-3.5 w-3.5" /> Disable
+                                <UserMinus className="mr-1 h-3.5 w-3.5" /> {t("admin.users.disable")}
                               </Button>
                             )}
                           </div>

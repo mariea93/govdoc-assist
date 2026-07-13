@@ -19,13 +19,22 @@ import { useAuth } from "@/contexts/auth-context";
 import { getPostProcessRoute } from "@/lib/post-process-nav";
 import { ProcessingOverlay } from "@/components/ProcessingOverlay";
 import { waitForDocument } from "@/lib/wait-for-document";
+import { useLanguage } from "@/contexts/language-context";
 
 export const Route = createFileRoute("/_app/upload")({
   head: () => ({ meta: [{ title: "Upload Document · GovLingua AI" }] }),
   component: UploadPage,
 });
 
+const translateLanguage = (langName: string, t: any) => {
+  if (langName === "Kinyarwanda") return t("languages.kinyarwanda.title");
+  if (langName === "English") return t("languages.english.title");
+  if (langName === "French") return t("languages.french.title");
+  return langName;
+};
+
 function UploadPage() {
+  const { t } = useLanguage();
   const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [source, setSource] = useState("Kinyarwanda");
@@ -41,7 +50,7 @@ function UploadPage() {
 
   const handleProcess = async () => {
     if (!file) {
-      toast.error("Please upload a document first");
+      toast.error(t("upload.uploadFirst"));
       return;
     }
     setProcessing(true);
@@ -64,22 +73,22 @@ function UploadPage() {
       
       setOverlayMessage(
         action === "summarize"
-          ? "Generating summary..."
+          ? t("upload.generatingSummary")
           : action === "translate"
-            ? "Translating..."
-            : "Processing..."
+            ? t("upload.translating")
+            : t("upload.processingDoc")
       );
       setOverlayOpen(true);
 
       try {
         await waitForDocument(result.dbId);
-        toast.success("Document processed successfully");
+        toast.success(t("upload.processedSuccess"));
         navigate(getPostProcessRoute(role, result.dbId));
       } catch (pollErr: any) {
-        toast.error(pollErr?.message || "Processing failed");
+        toast.error(pollErr?.message || t("upload.processingFailed"));
       }
     } catch (err: any) {
-      toast.error(err?.message || "Upload failed");
+      toast.error(err?.message || t("upload.failed"));
     } finally {
       setProcessing(false);
       setOverlayOpen(false);
@@ -89,8 +98,8 @@ function UploadPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <div>
-        <h1 className="font-display text-3xl font-bold tracking-tight">Upload Document</h1>
-        <p className="text-muted-foreground">PDF, DOCX or TXT files for AI summarization and translation.</p>
+        <h1 className="font-display text-3xl font-bold tracking-tight">{t("upload.title")}</h1>
+        <p className="text-muted-foreground">{t("upload.subtitle")}</p>
       </div>
 
       <Card>
@@ -136,9 +145,9 @@ function UploadPage() {
                 <div className="mb-4 rounded-full bg-primary/10 p-4">
                   <UploadCloud className="h-8 w-8 text-primary" />
                 </div>
-                <h3 className="font-display text-lg font-semibold">Drag & drop your document</h3>
+                <h3 className="font-display text-lg font-semibold">{t("upload.dragDrop")}</h3>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  or click to browse · PDF, DOCX, TXT up to 20 MB
+                  {t("upload.browseHint")}
                 </p>
               </>
             )}
@@ -148,23 +157,23 @@ function UploadPage() {
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
-          <CardHeader><CardTitle>Languages</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t("upload.languages")}</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <Label>Source language</Label>
+              <Label>{t("upload.sourceLanguage")}</Label>
               <Select value={source} onValueChange={setSource}>
                 <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {LANGUAGES.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                  {LANGUAGES.map((l) => <SelectItem key={l} value={l}>{translateLanguage(l, t)}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <Label>Target language</Label>
+              <Label>{t("upload.targetLanguage")}</Label>
               <Select value={target} onValueChange={setTarget}>
                 <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {LANGUAGES.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                  {LANGUAGES.map((l) => <SelectItem key={l} value={l}>{translateLanguage(l, t)}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -172,15 +181,15 @@ function UploadPage() {
         </Card>
 
         <Card>
-          <CardHeader><CardTitle>Processing options</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t("upload.processingOptions")}</CardTitle></CardHeader>
           <CardContent className="space-y-5">
             <div>
-              <Label>Action</Label>
+              <Label>{t("upload.action")}</Label>
               <RadioGroup value={action} onValueChange={setAction} className="mt-2 grid gap-2">
                 {[
-                  { v: "summarize", l: "Summarize only" },
-                  { v: "translate", l: "Translate only" },
-                  { v: "both", l: "Summarize and translate" },
+                  { v: "summarize", l: t("upload.summarizeOnly") },
+                  { v: "translate", l: t("upload.translateOnly") },
+                  { v: "both", l: t("upload.summarizeAndTranslate") },
                 ].map((o) => (
                   <Fragment key={o.v}>
                     <label className="flex cursor-pointer items-center gap-2 rounded-md border p-3 text-sm hover:bg-muted/50">
@@ -188,11 +197,11 @@ function UploadPage() {
                     </label>
                     {o.v === action && (action === "summarize" || action === "both") && (
                       <div className="pl-6 py-1 space-y-2">
-                        <Label className="text-xs text-muted-foreground">Summary length</Label>
+                        <Label className="text-xs text-muted-foreground">{t("upload.summaryLength")}</Label>
                         <RadioGroup value={length} onValueChange={setLength} className="grid grid-cols-3 gap-2">
                           {["short", "medium", "detailed"].map((l) => (
                             <label key={l} className="flex cursor-pointer items-center justify-center gap-2 rounded-md border p-2 text-xs capitalize hover:bg-muted/50">
-                              <RadioGroupItem value={l} /> {l}
+                              <RadioGroupItem value={l} /> {t(`settings.length.${l}` as any)}
                             </label>
                           ))}
                         </RadioGroup>
@@ -208,7 +217,7 @@ function UploadPage() {
 
       <div className="flex justify-end">
         <Button size="lg" onClick={handleProcess} disabled={processing}>
-          {processing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processing…</> : "Process Document"}
+          {processing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {t("upload.processing")}</> : t("upload.processDocument")}
         </Button>
       </div>
       <ProcessingOverlay open={overlayOpen} message={overlayMessage} />

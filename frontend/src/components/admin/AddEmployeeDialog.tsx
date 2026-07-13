@@ -73,7 +73,7 @@ export function AddEmployeeDialog({ open, onOpenChange, onCreated }: AddEmployee
         password,
         role: "EMPLOYEE",
       });
-      toast.success("Employee account created successfully");
+      toast.success(t("admin.users.employeeCreated"));
       resetForm();
       onOpenChange(false);
       onCreated();
@@ -82,7 +82,7 @@ export function AddEmployeeDialog({ open, onOpenChange, onCreated }: AddEmployee
         toast.error(t("auth.emailExists"));
         return;
       }
-      toast.error(err instanceof Error ? err.message : "Failed to create employee account");
+      toast.error(err instanceof Error ? err.message : t("admin.users.failedCreateEmployee"));
     } finally {
       setSubmitting(false);
     }
@@ -92,8 +92,8 @@ export function AddEmployeeDialog({ open, onOpenChange, onCreated }: AddEmployee
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Add Employee</DialogTitle>
-          <DialogDescription>Create a new employee account.</DialogDescription>
+          <DialogTitle>{t("admin.users.addEmployeeTitle")}</DialogTitle>
+          <DialogDescription>{t("admin.users.addEmployeeDesc")}</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -168,16 +168,16 @@ export function AddEmployeeDialog({ open, onOpenChange, onCreated }: AddEmployee
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={submitting}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={submitting} className="bg-[#163a5f] hover:bg-[#163a5f]/95">
               {submitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating…
+                  {t("auth.registering")}
                 </>
               ) : (
-                "Create Employee"
+                t("admin.users.createEmployee")
               )}
             </Button>
           </DialogFooter>
